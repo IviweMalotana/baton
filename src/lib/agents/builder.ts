@@ -1,5 +1,5 @@
-import { completeJson, getAnthropic } from "../anthropic";
-import { env, features } from "../env";
+import { completeJson, aiReady, activeModel } from "../ai/text";
+import { features } from "../env";
 import {
   forceBranch,
   getDefaultBranch,
@@ -12,7 +12,7 @@ import { APP_NAME, BRANCH_PREFIX } from "../brand";
 import type { AgentContext, BrdResult, BuildResult, PlanResult } from "./types";
 
 /**
- * Builder agent — GROUNDED in the real repo.
+ * Builder agent â€” GROUNDED in the real repo.
  *
  * When a GitHub repo + token are connected and an API key is set, it performs a
  * real build in three grounded steps:
@@ -22,14 +22,14 @@ import type { AgentContext, BrdResult, BuildResult, PlanResult } from "./types";
  *
  * The branch is force-reset to the base at the start of every build, so reruns
  * start clean instead of stacking on a previous attempt's commits. Proposed
- * paths are validated against the real tree — editing a file that doesn't
+ * paths are validated against the real tree â€” editing a file that doesn't
  * exist is only allowed as an explicit new file, and is logged as such.
  */
 
 const PICK_SYSTEM = `You are a senior engineer locating where a change should be made in an
 existing codebase. You are given the request, the plan, and the repository's
 actual file list. Choose the files (max 5) most likely to need reading/editing.
-Only choose paths that appear in the provided file list — never invent paths.
+Only choose paths that appear in the provided file list â€” never invent paths.
 Reply with a single JSON object only: { "files": string[] }`;
 
 const BUILD_SYSTEM = `You are a senior software engineer implementing an approved change in an
@@ -67,7 +67,7 @@ export async function runBuilder(
 ): Promise<BuildResult> {
   const branch = `${BRANCH_PREFIX}/${ctx.request.id.slice(0, 8)}`;
 
-  const canBuildForReal = Boolean(ctx.githubToken && ctx.repo && features.anthropic && getAnthropic());
+  const canBuildForReal = Boolean(ctx.githubToken && ctx.repo && features.ai && aiReady());
   if (canBuildForReal) {
     try {
       return await realBuild(ctx, plan, brd, branch);
@@ -76,7 +76,7 @@ export async function runBuilder(
     }
   } else {
     await ctx.log(
-      "Builder running as a stub — needs a connected GitHub repo + ANTHROPIC_API_KEY to write real code."
+      "Builder running as a stub â€” needs a connected GitHub repo + an AI provider key to write real code."
     );
   }
   return stubBuild(ctx, branch);
@@ -91,7 +91,7 @@ async function realBuild(
   const client: GhClient = { token: ctx.githubToken!, repo: ctx.repo! };
   await ctx.log(`Builder working on ${ctx.repo} branch ${branch}.`);
 
-  // Start every build from a clean base — reruns must not inherit junk commits.
+  // Start every build from a clean base â€” reruns must not inherit junk commits.
   const { base, baseSha } = await getDefaultBranch(client);
   await forceBranch(client, branch, baseSha);
 
@@ -151,7 +151,7 @@ Return the files to read as JSON.`,
 Repository file list:
 ${treeList.join("\n")}
 
-Current contents of the relevant files${context.length ? ":" : " — none could be read; be conservative."}
+Current contents of the relevant files${context.length ? ":" : " â€” none could be read; be conservative."}
 ${context.map((f) => `\n=== ${f.path} ===\n${f.contents}`).join("\n")}
 
 Return the file changes as JSON.`,
@@ -183,19 +183,19 @@ Return the file changes as JSON.`,
   }
   if (newFiles.length === proposed.length && context.length > 0) {
     // Everything "new" while real files were readable smells like hallucinated
-    // paths — refuse rather than commit junk.
+    // paths â€” refuse rather than commit junk.
     throw new Error(
-      `All proposed paths are new despite existing context (${newFiles.join(", ")}) — likely ungrounded`
+      `All proposed paths are new despite existing context (${newFiles.join(", ")}) â€” likely ungrounded`
     );
   }
 
   // Duplicate-copy guard: flag user-visible text the change ADDS to a file that
-  // already displays the same (or near-identical) text — the kind of sloppy
+  // already displays the same (or near-identical) text â€” the kind of sloppy
   // duplication a human reviewer would reject (e.g. a second "Welcome back").
   const oldByPath = new Map(context.map((c) => [c.path, c.contents]));
   const dupWarnings: string[] = [];
   for (const f of proposed) {
-    if (!sourceFiles.includes(f.path)) continue; // brand-new file — nothing to duplicate
+    if (!sourceFiles.includes(f.path)) continue; // brand-new file â€” nothing to duplicate
     const old = oldByPath.get(f.path) ?? (await getFile(client, f.path, base))?.contents ?? "";
     if (!old) continue;
     for (const d of detectDuplicateCopy(old, f.contents)) {
@@ -204,7 +204,7 @@ Return the file changes as JSON.`,
   }
   if (dupWarnings.length > 0) {
     await ctx.log(
-      `⚠️ Possible duplicate copy — the change repeats text already on the page. Review before merge.`,
+      `âš ï¸ Possible duplicate copy â€” the change repeats text already on the page. Review before merge.`,
       { duplicates: dupWarnings }
     );
   }
@@ -224,10 +224,10 @@ Return the file changes as JSON.`,
 
   const baseSummary = String(json.summary ?? "").trim() || `Implemented "${ctx.request.title}".`;
   const summary = dupWarnings.length
-    ? `${baseSummary}\n\n⚠️ Possible duplicate copy: ${dupWarnings.join("; ")}`
+    ? `${baseSummary}\n\nâš ï¸ Possible duplicate copy: ${dupWarnings.join("; ")}`
     : baseSummary;
   const diff = [
-    `Committed ${changed.length} file(s) to \`${branch}\` (by ${env.ANTHROPIC_MODEL}):`,
+    `Committed ${changed.length} file(s) to \`${branch}\` (by ${activeModel()}):`,
     ...changed.map((p) => `- ${p}`),
     "",
     summary,
@@ -239,7 +239,7 @@ Return the file changes as JSON.`,
 /**
  * Validate proposed file paths against the REAL repo tree.
  *
- * A path that exists in the tree is always acceptable — including Next.js
+ * A path that exists in the tree is always acceptable â€” including Next.js
  * route-group paths like `src/app/(auth)/login/page.tsx` (an earlier regex
  * guard rejected any parentheses and silently discarded correct edits).
  * A new path is acceptable only if it looks like a sane relative repo path.
@@ -282,7 +282,7 @@ function normalizeCopy(t: string): string {
   return t
     .toLowerCase()
     .replace(/\s+/g, " ")
-    .replace(/^[\s.,!?;:"'—–-]+|[\s.,!?;:"'—–-]+$/g, "")
+    .replace(/^[\s.,!?;:"'â€”â€“-]+|[\s.,!?;:"'â€”â€“-]+$/g, "")
     .trim();
 }
 
@@ -334,7 +334,7 @@ export function detectDuplicateCopy(oldSrc: string, newSrc: string): DuplicateCo
     if (seen.has(norm)) continue;
     const addedInstances = count - (oldCounts.get(norm) ?? 0);
     if (addedInstances <= 0) continue; // not newly added text
-    // Find an existing (old) phrase this duplicates — but only when that phrase
+    // Find an existing (old) phrase this duplicates â€” but only when that phrase
     // is still RETAINED in the new file. If the old phrase was replaced/edited
     // away (its count dropped), the new text is an edit, not a duplicate.
     for (const [oldNorm, oldOriginal] of oldOriginalByNorm) {
@@ -374,7 +374,7 @@ new file mode 100644
 +Implemented per approved acceptance criteria (builder stub).`;
   return {
     branch,
-    summary: `Applied the plan on ${branch}. (Builder stub — no real code changes.)`,
+    summary: `Applied the plan on ${branch}. (Builder stub â€” no real code changes.)`,
     diff,
     committed: false,
     filesChanged: [],

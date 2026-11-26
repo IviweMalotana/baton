@@ -55,7 +55,7 @@ export default async function SettingsPage({
   }
 
   const canSeed = Boolean(
-    company?.githubConnected && company.githubDefaultRepo && features.anthropic
+    company?.githubConnected && company.githubDefaultRepo && features.ai
   );
   const [reqCount, lastSeed] = await Promise.all([
     db.requirementDoc.count({ where: { companyId: user.companyId } }),
@@ -93,7 +93,7 @@ export default async function SettingsPage({
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Company</h3>
         <p className="small muted">
-          Name: {company?.name} · Slug: <span className="mono">{company?.slug}</span>
+          Name: {company?.name} Â· Slug: <span className="mono">{company?.slug}</span>
         </p>
       </div>
 
@@ -128,7 +128,7 @@ export default async function SettingsPage({
                   </a>
                 </div>
                 <div className="small muted">
-                  {connectedRepos.length} repositor{connectedRepos.length === 1 ? "y" : "ies"} ·
+                  {connectedRepos.length} repositor{connectedRepos.length === 1 ? "y" : "ies"} Â·
                   default{" "}
                   <span className="mono">{company.githubDefaultRepo ?? "none"}</span>
                 </div>
@@ -178,7 +178,7 @@ export default async function SettingsPage({
                   {pickerRepos.length > 0 ? (
                     <select name="repoSelect" defaultValue="" style={{ maxWidth: 320 }}>
                       <option value="" disabled>
-                        Pick a repository…
+                        Pick a repositoryâ€¦
                       </option>
                       {pickerRepos.map((r) => (
                         <option key={r.fullName} value={r.fullName}>
@@ -186,7 +186,7 @@ export default async function SettingsPage({
                           {r.private ? " (private)" : ""}
                         </option>
                       ))}
-                      <option value="__manual__">Other — type below…</option>
+                      <option value="__manual__">Other â€” type belowâ€¦</option>
                     </select>
                   ) : null}
                   <input
@@ -263,11 +263,11 @@ export default async function SettingsPage({
           If your host deploys a preview per branch, add its URL template with a{" "}
           <span className="mono">{"{branch}"}</span> placeholder. The tester will
           wait for that preview to come live and verify the{" "}
-          <strong>actual change</strong> — bug-fix and regression become real
+          <strong>actual change</strong> â€” bug-fix and regression become real
           verdicts. Without it, tests run against the app URL above.
           <br />
           Examples: <span className="mono">https://app-{"{branch}"}.up.railway.app</span>{" "}
-          · <span className="mono">https://{"{repoName}"}-git-{"{branch}"}.vercel.app</span>
+          Â· <span className="mono">https://{"{repoName}"}-git-{"{branch}"}.vercel.app</span>
         </p>
         {manage ? (
           <form action={setPreviewTemplate} className="row">
@@ -296,7 +296,7 @@ export default async function SettingsPage({
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Requirements corpus</h3>
         <p className="small muted">
-          The living requirements — this repository's behaviour documented as
+          The living requirements â€” this repository's behaviour documented as
           version-controlled Cucumber/Gherkin <span className="mono">.feature</span>{" "}
           files (Feature / Scenario / Given-When-Then), the source of truth{" "}
           {APP_NAME} uses for search and per-request impact analysis. Seeding
@@ -306,7 +306,7 @@ export default async function SettingsPage({
           Indexed requirements: <strong>{reqCount}</strong>
           {lastSeed && (
             <>
-              {" · "}last seed:{" "}
+              {" Â· "}last seed:{" "}
               <span className="mono">{lastSeed.status}</span>
               {lastSeed.status === "done" && seedResult.count != null && (
                 <>
@@ -323,7 +323,7 @@ export default async function SettingsPage({
                 </>
               )}
               {lastSeed.status === "error" && lastSeed.error && (
-                <span className="muted"> — {lastSeed.error}</span>
+                <span className="muted"> â€” {lastSeed.error}</span>
               )}
             </>
           )}
@@ -334,7 +334,7 @@ export default async function SettingsPage({
             <form action={seedRequirements}>
               <button className="btn secondary" type="submit" disabled={seeding}>
                 {seeding
-                  ? "Seeding… (a PR will open on your repo)"
+                  ? "Seedingâ€¦ (a PR will open on your repo)"
                   : reqCount > 0
                     ? "Re-seed requirements corpus"
                     : "Seed requirements corpus"}
@@ -343,7 +343,7 @@ export default async function SettingsPage({
           ) : (
             <p className="small muted">
               Connect GitHub, set a default repo, and configure{" "}
-              <span className="mono">ANTHROPIC_API_KEY</span> to enable seeding.
+              <span className="mono">DEEPSEEK_API_KEY</span> to enable seeding.
             </p>
           )
         ) : (
@@ -355,7 +355,7 @@ export default async function SettingsPage({
         <h3 style={{ marginTop: 0 }}>Design system</h3>
         <p className="small muted">
           The strict definitions of your UI component library (cards, tables,
-          dialogs, buttons, badges…), learned from the codebase. Extraction opens
+          dialogs, buttons, badgesâ€¦), learned from the codebase. Extraction opens
           a PR with a <span className="mono">design/components.md</span> catalog
           and a design-category requirement per component, which {APP_NAME}'s UI
           checks enforce.
@@ -364,7 +364,7 @@ export default async function SettingsPage({
           Design components indexed: <strong>{designCount}</strong>
           {lastDesign && (
             <>
-              {" · "}last extract: <span className="mono">{lastDesign.status}</span>
+              {" Â· "}last extract: <span className="mono">{lastDesign.status}</span>
               {lastDesign.status === "done" && designResult.count != null && (
                 <>
                   {" "}({designResult.count} components
@@ -380,7 +380,7 @@ export default async function SettingsPage({
                 </>
               )}
               {lastDesign.status === "error" && lastDesign.error && (
-                <span className="muted"> — {lastDesign.error}</span>
+                <span className="muted"> â€” {lastDesign.error}</span>
               )}
             </>
           )}
@@ -390,7 +390,7 @@ export default async function SettingsPage({
             <form action={extractDesign}>
               <button className="btn secondary" type="submit" disabled={extracting}>
                 {extracting
-                  ? "Extracting… (a PR will open on your repo)"
+                  ? "Extractingâ€¦ (a PR will open on your repo)"
                   : designCount > 0
                     ? "Re-extract design system"
                     : "Extract design system"}
@@ -399,7 +399,7 @@ export default async function SettingsPage({
           ) : (
             <p className="small muted">
               Connect GitHub, set a default repo, and configure{" "}
-              <span className="mono">ANTHROPIC_API_KEY</span> to enable extraction.
+              <span className="mono">DEEPSEEK_API_KEY</span> to enable extraction.
             </p>
           )
         ) : (
@@ -410,13 +410,13 @@ export default async function SettingsPage({
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Agents</h3>
         <p className="small muted">
-          Acceptance-criteria drafting uses Claude (Sonnet) when{" "}
-          <span className="mono">ANTHROPIC_API_KEY</span> is set — currently{" "}
-          <strong>{features.anthropic ? "enabled" : "using the template fallback"}</strong>.
+          Acceptance-criteria drafting uses DeepSeek when{" "}
+          <span className="mono">DEEPSEEK_API_KEY</span> is set â€” currently{" "}
+          <strong>{features.ai ? "enabled" : "using the template fallback"}</strong>.
           The BRD and planner agents use Claude; the UX-check agent drives a{" "}
           <strong>real headless browser</strong> to reproduce bugs; and when a
           repo is connected the builder agent <strong>writes real code</strong>,
-          and — when an app URL is set — the tester{" "}
+          and â€” when an app URL is set â€” the tester{" "}
           <strong>drives a real browser</strong> to perform the acceptance
           criteria as human actions, verifies a reported bug is fixed, and runs a
           regression sweep. The PR agent opens a{" "}

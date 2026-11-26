@@ -1,4 +1,4 @@
-import { completeText, getAnthropic } from "../anthropic";
+import { completeText, aiReady } from "../ai/text";
 import { features } from "../env";
 import { getFile, type GhClient } from "../github";
 import { searchRequirements } from "../requirements/store";
@@ -103,7 +103,7 @@ export async function checkUiConformance(
   ctx: AgentContext,
   build: BuildResult
 ): Promise<ConformanceResult | null> {
-  if (!features.anthropic || !getAnthropic() || !ctx.githubToken || !ctx.repo) return null;
+  if (!features.ai || !aiReady() || !ctx.githubToken || !ctx.repo) return null;
   if (!build.committed) return null;
 
   const files = changedUiFiles(build.filesChanged);

@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { AGENT_ROLES } from "@/lib/domain";
 
 /**
- * Integrations hub — one page the user visits to confirm every external
+ * Integrations hub â€” one page the user visits to confirm every external
  * dependency is wired: GitHub, Jira, AI provider, Playwright. Each row shows
  * current state and links out to the setup flow.
  */
@@ -33,7 +33,7 @@ export default async function IntegrationsPage() {
         <h1>Integrations</h1>
         <p className="muted">
           GitHub, Jira, your AI provider, and Playwright. Keep each one green
-          — the pipeline fails forward (template BRD, review-only QA) when
+          â€” the pipeline fails forward (template BRD, review-only QA) when
           one is down, but you lose the real behaviour.
         </p>
       </div>
@@ -46,7 +46,7 @@ export default async function IntegrationsPage() {
         {company?.githubConnected ? (
           <ul className="small">
             <li>Account: <span className="mono">{company.githubLogin}</span></li>
-            <li>Default repo: <span className="mono">{company.githubDefaultRepo ?? "—"}</span></li>
+            <li>Default repo: <span className="mono">{company.githubDefaultRepo ?? "â€”"}</span></li>
           </ul>
         ) : (
           <p className="muted small">Not connected. Head to Settings to start OAuth.</p>
@@ -68,8 +68,8 @@ export default async function IntegrationsPage() {
           </ul>
         ) : (
           <p className="muted small">
-            Not connected. Baton reads Jira projects, epics and tickets — and
-            links each Baton request to its Jira issue — once you add a site
+            Not connected. Baton reads Jira projects, epics and tickets â€” and
+            links each Baton request to its Jira issue â€” once you add a site
             URL + API token.
           </p>
         )}
@@ -91,7 +91,7 @@ export default async function IntegrationsPage() {
             {AGENT_ROLES.map((role) => (
               <tr key={role}>
                 <td className="mono small">{role}</td>
-                <td className="mono small">{routing[role] ?? "default (anthropic)"}</td>
+                <td className="mono small">{routing[role] ?? "default (deepseek)"}</td>
               </tr>
             ))}
           </tbody>
@@ -104,8 +104,8 @@ export default async function IntegrationsPage() {
           <Link href="/settings" className="btn secondary small">Manage</Link>
         </div>
         <ul className="small">
-          <li>App base URL: <span className="mono">{company?.appBaseUrl ?? "—"}</span></li>
-          <li>Preview template: <span className="mono">{company?.previewUrlTemplate ?? "—"}</span></li>
+          <li>App base URL: <span className="mono">{company?.appBaseUrl ?? "â€”"}</span></li>
+          <li>Preview template: <span className="mono">{company?.previewUrlTemplate ?? "â€”"}</span></li>
         </ul>
       </section>
     </div>

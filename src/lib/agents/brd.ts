@@ -1,13 +1,13 @@
-import { completeJson, getAnthropic } from "../anthropic";
-import { env, features } from "../env";
+import { completeJson, aiReady, activeModel } from "../ai/text";
+import { features } from "../env";
 import type { AgentContext, BrdResult, UxCheckResult } from "./types";
 
 /**
  * BRD agent.
  *
  * Turns a request (plus the UX-check finding) into a Business Requirements
- * Document written in a Business-Analyst / UX voice — Given/When/Then Gherkin,
- * no dev-heavy jargon — and a list of acceptance criteria.
+ * Document written in a Business-Analyst / UX voice â€” Given/When/Then Gherkin,
+ * no dev-heavy jargon â€” and a list of acceptance criteria.
  *
  * Uses the real Anthropic API when ANTHROPIC_API_KEY is set. Falls back to a
  * deterministic template so the pipeline still runs end-to-end without a key.
@@ -22,10 +22,10 @@ You always produce Gherkin using Feature / Scenario / Given / When / Then, phras
 plain language a non-technical stakeholder can validate.
 
 You also flag any infrastructure or third-party-configuration work this request implies
-that a coding agent CANNOT do from within a pull request — e.g. changing a Railway or
+that a coding agent CANNOT do from within a pull request â€” e.g. changing a Railway or
 Vercel environment variable/service/domain, verifying a Resend sending domain, DNS,
 rotating a secret, provisioning a new service. Each needs a human or an MCP tool to run
-outside the code change. If nothing like that applies, leave the list empty — do not
+outside the code change. If nothing like that applies, leave the list empty â€” do not
 invent infra work for a plain UI/logic change.
 
 Reply with a single JSON object only, matching exactly this shape:
@@ -40,7 +40,9 @@ export async function runBrd(
   ctx: AgentContext,
   uxCheck: UxCheckResult
 ): Promise<BrdResult> {
-  const { title, description, type } = ctx.request;
+  const { title, description, type, discoveryBrief, discoveryTranscript } = ctx.request;
+  const confirmed = (discoveryBrief || "").trim();
+  const transcript = (discoveryTranscript || "").trim().slice(-6000);
 
   const userPrompt = `Request type: ${type}
 Title: ${title}
@@ -48,14 +50,20 @@ Title: ${title}
 Stakeholder description:
 ${description}
 
+Confirmed discovery brief (agreed with the stakeholder before drafting):
+${confirmed || "(none - draft from the description alone)"}
+
+Verbatim stakeholder transcript (supporting context, may be empty):
+${transcript || "(none)"}
+
 UX-check finding:
 ${uxCheck.summary}
 ${uxCheck.reproduced ? "(The issue was reproduced.)" : ""}
 
 Write the BRD as JSON.`;
 
-  if (!features.anthropic || !getAnthropic()) {
-    await ctx.log("ANTHROPIC_API_KEY not set — using deterministic BRD template.");
+  if (!features.ai || !aiReady()) {
+    await ctx.log("No AI provider key set â€” using deterministic BRD template.");
     return fallbackBrd(ctx, uxCheck);
   }
 
@@ -68,12 +76,12 @@ Write the BRD as JSON.`;
         ? json.acceptanceCriteria.map(String)
         : [],
       devOpsNotes: Array.isArray(json.devOpsNotes) ? json.devOpsNotes.map(String) : [],
-      model: env.ANTHROPIC_MODEL,
+      model: activeModel(),
     };
     if (!result.narrative || !result.gherkin || result.acceptanceCriteria.length === 0) {
       throw new Error("Model returned an incomplete BRD");
     }
-    await ctx.log(`BRD drafted by ${env.ANTHROPIC_MODEL}.`, {
+    await ctx.log(`BRD drafted by ${activeModel()}.`, {
       criteria: result.acceptanceCriteria.length,
       devOpsNotes: result.devOpsNotes.length,
     });

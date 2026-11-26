@@ -1,4 +1,4 @@
-import { completeText, getAnthropic } from "../anthropic";
+import { completeText, aiReady } from "../ai/text";
 import { features } from "../env";
 import { APP_NAME, BRANCH_PREFIX } from "../brand";
 import {
@@ -311,8 +311,8 @@ export async function seedRequirementsForCompany(args: {
   log?: (msg: string) => void;
 }): Promise<SeedResult> {
   const log = args.log ?? ((m: string) => console.log(`[seed] ${m}`));
-  if (!features.anthropic || !getAnthropic()) {
-    throw new Error("Seeding requires ANTHROPIC_API_KEY");
+  if (!features.ai || !aiReady()) {
+    throw new Error("Seeding requires a configured AI provider");
   }
 
   const client: GhClient = { token: args.token, repo: args.repo };

@@ -5,8 +5,11 @@ import { db } from "@/lib/db";
 import { PIPELINE_STEPS, isActive, statusLabel, stepState } from "@/lib/pipeline-view";
 import { buildPreviewUrl } from "@/lib/agents/preview";
 import { BrdApproval } from "@/components/BrdApproval";
+import { DiscoveryPanel } from "@/components/DiscoveryPanel";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { retryRequest } from "@/app/actions/requests";
+import { features, env } from "@/lib/env";
+import { activeModel } from "@/lib/ai/text";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +56,7 @@ export default async function RequestDetail({
         include: { user: { select: { name: true, email: true } } },
       },
       events: { orderBy: { createdAt: "asc" } },
+      discoveryTurns: { orderBy: { createdAt: "asc" } },
     },
   });
   if (!request) notFound();
@@ -202,6 +206,35 @@ export default async function RequestDetail({
         <h3 style={{ marginTop: 0 }}>Original request</h3>
         <p style={{ whiteSpace: "pre-wrap", margin: 0 }}>{request.description}</p>
       </div>
+
+      {/* Stakeholder discovery: the BA interview that confirms the brief */}
+      {request.status === "DISCOVERY" && (
+        <DiscoveryPanel
+          requestId={request.id}
+          state={request.discoveryState}
+          brief={request.discoveryBrief}
+          turns={request.discoveryTurns.map((t) => ({
+            id: t.id,
+            role: t.role,
+            content: t.content,
+            source: t.source,
+            at: t.createdAt.toISOString(),
+          }))}
+          deepgramEnabled={features.deepgram}
+          deepgramModel={env.DEEPGRAM_MODEL}
+          modelLabel={activeModel()}
+        />
+      )}
+
+      {request.discoveryState === "confirmed" && request.discoveryBrief && (
+        <div className="card">
+          <h3 style={{ marginTop: 0 }}>Confirmed brief</h3>
+          <p className="small muted" style={{ marginTop: -8 }}>
+            Frozen with the stakeholder before the BRD was drafted.
+          </p>
+          <p style={{ whiteSpace: "pre-wrap" }}>{request.discoveryBrief}</p>
+        </div>
+      )}
 
       {/* UX check */}
       {request.uxCheck && (

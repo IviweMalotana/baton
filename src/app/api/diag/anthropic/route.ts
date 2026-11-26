@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser, can } from "@/lib/auth";
-import { env, features } from "@/lib/env";
-import { completeText } from "@/lib/anthropic";
+import { features } from "@/lib/env";
+import { activeModel, activeProvider, completeText } from "@/lib/ai/text";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Admin-only diagnostic: makes a tiny call over the SAME transport the agents
- * use (raw node:https, SSE) and reports exactly what happens. Never returns the
- * API key; only the error status/message.
+ * Admin-only diagnostic: makes a tiny call on the same provider/transport the
+ * agents use (raw node:https) and reports exactly what happens. Never returns
+ * the API key; only the provider, model and error status/message.
  */
 export async function GET() {
   const user = await getCurrentUser();
@@ -17,13 +17,18 @@ export async function GET() {
   }
 
   const base = {
-    keyConfigured: features.anthropic,
-    model: env.ANTHROPIC_MODEL,
-    transport: "node:https (raw, SSE, no fetch)",
+    provider: activeProvider(),
+    keyConfigured: features.ai,
+    model: activeModel(),
+    transport: "node:https (raw, no fetch)",
   };
 
-  if (!features.anthropic) {
-    return NextResponse.json({ ...base, ok: false, reason: "ANTHROPIC_API_KEY not set" });
+  if (!features.ai) {
+    return NextResponse.json({
+      ...base,
+      ok: false,
+      reason: "Set DEEPSEEK_API_KEY (preferred) or ANTHROPIC_API_KEY",
+    });
   }
 
   const started = Date.now();

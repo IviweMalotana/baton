@@ -2,6 +2,7 @@ import type { RequestStatus } from "./domain";
 
 /** Ordered pipeline steps for the progress UI, mapped to request statuses. */
 export const PIPELINE_STEPS: { key: string; label: string; status: RequestStatus }[] = [
+  { key: "discovery", label: "Discovery", status: "DISCOVERY" },
   { key: "ux", label: "UX check", status: "UX_CHECK" },
   { key: "brd", label: "BRD", status: "BRD_DRAFTING" },
   { key: "approval", label: "Approval", status: "AWAITING_APPROVAL" },
@@ -15,6 +16,7 @@ export const PIPELINE_STEPS: { key: string; label: string; status: RequestStatus
 
 const ORDER: RequestStatus[] = [
   "INTAKE",
+  "DISCOVERY",
   "UX_CHECK",
   "BRD_DRAFTING",
   "AWAITING_APPROVAL",
@@ -68,6 +70,7 @@ export function isActive(status: string): boolean {
 /** One plain-language sentence describing what's happening at this status. */
 export function statusExplainer(status: string): string {
   const map: Record<string, string> = {
+    DISCOVERY: "Interviewing the stakeholder until the brief is confirmed.",
     INTAKE: "Just filed — queued to start.",
     ANALYSIS: "Analysing the request, the code and the existing requirements.",
     QUESTIONS: "Blocked on answers the BA cannot infer. Needs you.",
@@ -97,6 +100,7 @@ export function statusExplainer(status: string): string {
 /** True when the request is blocked on a person (needs an answer or a decision). */
 export function needsAttention(status: string): boolean {
   return (
+    status === "DISCOVERY" ||
     status === "AWAITING_APPROVAL" ||
     status === "AWAITING_ACCEPTANCE" ||
     status === "QUESTIONS" ||
@@ -106,6 +110,7 @@ export function needsAttention(status: string): boolean {
 
 export function statusLabel(status: string): string {
   const map: Record<string, string> = {
+    DISCOVERY: "Discovery",
     INTAKE: "Intake",
     ANALYSIS: "Analysis",
     QUESTIONS: "Questions",

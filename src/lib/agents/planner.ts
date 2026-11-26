@@ -1,5 +1,5 @@
-import { completeJson, getAnthropic } from "../anthropic";
-import { env, features } from "../env";
+import { completeJson, aiReady, activeModel } from "../ai/text";
+import { features } from "../env";
 import type { AgentContext, BrdResult, PlanResult } from "./types";
 
 /**
@@ -18,7 +18,7 @@ implementation plan for another engineer (or a coding agent) to execute.
 
 Given a request and its acceptance criteria, produce a concrete, ordered plan.
 Be specific and technical, but do not invent details of a codebase you cannot
-see — when a location is unknown, say what to look for. Include a testing step.
+see â€” when a location is unknown, say what to look for. Include a testing step.
 
 Reply with a single JSON object only, matching exactly this shape:
 {
@@ -46,8 +46,8 @@ ${ctx.repo ? `Target repository: ${ctx.repo}` : ""}
 
 Write the implementation plan as JSON.`;
 
-  if (!features.anthropic || !getAnthropic()) {
-    await ctx.log("ANTHROPIC_API_KEY not set — using deterministic plan template.");
+  if (!features.ai || !aiReady()) {
+    await ctx.log("No AI provider key set â€” using deterministic plan template.");
     return fallbackPlan(ctx, brd);
   }
 
@@ -61,7 +61,7 @@ Write the implementation plan as JSON.`;
     if (!result.summary || result.steps.length === 0) {
       throw new Error("Model returned an incomplete plan");
     }
-    await ctx.log(`Plan drafted by ${env.ANTHROPIC_MODEL}.`, { steps: result.steps.length });
+    await ctx.log(`Plan drafted by ${activeModel()}.`, { steps: result.steps.length });
     return result;
   } catch (err) {
     await ctx.log(`Planner fell back to template after model error: ${(err as Error).message}`);

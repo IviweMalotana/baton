@@ -25,8 +25,9 @@ export default async function NewRequestPage() {
     <div style={{ maxWidth: 640 }}>
       <h2>New request</h2>
       <p className="muted small">
-        Describe the problem or the capability you want. The UX-check agent will
-        classify it (bug vs feature), then draft a BRD for you to approve.
+        Describe the problem or the capability you want. Baton captures the
+        stakeholder conversation, asks clarifying questions until the brief is
+        confirmed, then drafts a BRD for you to approve.
       </p>
       {company?.appBaseUrl && (
         <p className="small">
@@ -40,8 +41,9 @@ export default async function NewRequestPage() {
         <NewRequestForm repos={repos.map((r) => r.fullName)} defaultRepo={activeRepo} />
       </div>
       <p className="small muted">
-        Filing kicks off the pipeline in the background — you'll land on the
-        request page and watch the UX check and BRD draft appear as they run.
+        Filing opens discovery. Record or paste what the stakeholder wants, answer
+        Baton&apos;s questions, then confirm the brief. Only then does the UX check
+        and BRD run in the background.
         {repos.length === 0 && company?.githubConnected === false && (
           <> Connect GitHub and add a repository in Settings to target a repo.</>
         )}

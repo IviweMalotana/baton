@@ -1,4 +1,4 @@
-// Baton — data model (BA-to-QA pipeline)
+// Baton â€” data model (BA-to-QA pipeline)
 //
 // A Company registers with an owner. Owners/admins invite collaborators and
 // assign roles. Stakeholders file Requests. Each Request runs through a
@@ -92,11 +92,11 @@ model JiraIssue {
 
 // A ticket Baton created in Jira for a request, in MVP/delivery structure:
 //   Epic (existing Jira epic, via Request.jiraIssueKey)
-//     └─ Product ticket   — the true deliverable (kind "product")
-//          ├─ Design      — the prototype/UX change (kind "design")
-//          ├─ Backend     — backend changes (kind "backend")
-//          ├─ Frontend    — frontend changes (kind "frontend")
-//          └─ DevOps      — human/MCP-only infra work, only created when the
+//     â””â”€ Product ticket   â€” the true deliverable (kind "product")
+//          â”œâ”€ Design      â€” the prototype/UX change (kind "design")
+//          â”œâ”€ Backend     â€” backend changes (kind "backend")
+//          â”œâ”€ Frontend    â€” frontend changes (kind "frontend")
+//          â””â”€ DevOps      â€” human/MCP-only infra work, only created when the
 //                           BRD surfaced any (kind "devops"; needsHuman=true)
 // One row per (request, kind); re-running ticket creation updates the row in
 // place rather than filing duplicates.
@@ -358,7 +358,7 @@ model Request {
   type        String   @default("UNKNOWN") // RequestType
   status      String   @default("INTAKE") // RequestStatus
   priority    String   @default("normal") // low | normal | high
-  repoFullName String? // which connected repo this request targets (null → company default)
+  repoFullName String? // which connected repo this request targets (null â†’ company default)
   // Optional Jira issue this Baton request is driving. The Jira ticket remains the
   // delivery source of truth; Baton drives the BA/QA pipeline on top of it.
   // If set, treated as the EPIC the generated product ticket is filed under.
@@ -368,6 +368,12 @@ model Request {
   designPrototypeUrl String?
   projectId    String?
   project      Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  // Stakeholder discovery. Baton captures the conversation (Deepgram or typed),
+  // interviews the stakeholder one question at a time, and freezes a confirmed
+  // brief before the BRD is drafted.
+  discoveryState      String @default("capturing") // capturing | questioning | ready | confirmed
+  discoveryTranscript String @default("")
+  discoveryBrief      String @default("")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -387,10 +393,26 @@ model Request {
   approvals Approval[]
   events    PipelineEvent[]
   questions ClarifyingQuestion[]
+  discoveryTurns DiscoveryTurn[]
   tickets   DeliveryTicket[]
 
   @@index([companyId])
   @@index([status])
+}
+
+// One line of the BA <-> stakeholder interview. Voice lines are transcribed by
+// Deepgram in the browser and saved as they arrive; typed lines come from the
+// answer box. The agent asks one question at a time until the brief is ready.
+model DiscoveryTurn {
+  id        String   @id @default(cuid())
+  requestId String
+  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  role      String   // agent | stakeholder | system
+  content   String
+  source    String   @default("text") // text | voice
+  createdAt DateTime @default(now())
+
+  @@index([requestId])
 }
 
 // Per-request impact analysis against the living requirements corpus: which
@@ -432,7 +454,7 @@ model Brd {
   acceptanceCriteria String   // JSON array of acceptance-criteria bullet strings
   // JSON array of plain-language notes naming infra/third-party work (deploy
   // config, env vars, DNS, Railway/Vercel/Resend changes, ...) that needs a
-  // human or an MCP tool to carry out — the coding agent cannot do these from
+  // human or an MCP tool to carry out â€” the coding agent cannot do these from
   // a PR. Surfaced on its own DevOps delivery ticket, never folded into the
   // product ticket.
   devOpsNotes        String   @default("[]")

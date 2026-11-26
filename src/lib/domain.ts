@@ -45,6 +45,8 @@ export type RequestType = "UNKNOWN" | "BUG" | "FEATURE";
  * AWAITING_APPROVAL / AWAITING_ACCEPTANCE without an ACCEPTED decision.
  */
 export type RequestStatus =
+  // Discovery (stakeholder interview before any drafting)
+  | "DISCOVERY"
   // New (spec)
   | "INTAKE"
   | "ANALYSIS"
@@ -71,6 +73,7 @@ export type RequestStatus =
   | "FAILED";
 
 export const LIFECYCLE_ORDER: RequestStatus[] = [
+  "DISCOVERY",
   "INTAKE",
   "ANALYSIS",
   "QUESTIONS",

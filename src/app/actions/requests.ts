@@ -60,13 +60,18 @@ export async function createRequest(
       designPrototypeUrl: parsed.data.designPrototypeUrl || null,
       companyId: user.companyId,
       createdById: user.id,
+      status: "DISCOVERY",
+      discoveryState: "capturing",
     },
   });
   await logEvent(request.id, "intake", `Request filed by ${user.name ?? user.email}.`);
+  await logEvent(
+    request.id,
+    "discovery",
+    "Discovery opened. Capture the stakeholder conversation, then interview them until the brief is confirmed."
+  );
 
-  // Phase 1 (UX check + BRD) runs in the background; return immediately.
-  await enqueue("to_approval", request.id);
-
+  // The pipeline does not run yet: discovery must be confirmed first.
   redirect(`/requests/${request.id}`);
 }
 
@@ -138,6 +143,18 @@ export async function retryRequest(formData: FormData): Promise<void> {
     where: { id: requestId, companyId: user.companyId },
   });
   if (!request) redirect("/requests");
+
+  // A request whose brief was never confirmed goes back to discovery, not
+  // straight into a BRD written from an unconfirmed description.
+  if (request.discoveryState !== "confirmed") {
+    await db.request.update({
+      where: { id: requestId },
+      data: { status: "DISCOVERY" },
+    });
+    await logEvent(requestId, "pipeline", "Pipeline restarted: discovery is still open.");
+    revalidatePath(`/requests/${requestId}`);
+    redirect(`/requests/${requestId}`);
+  }
 
   await logEvent(requestId, "pipeline", "Pipeline restarted from intake.");
   await enqueue("to_approval", requestId);

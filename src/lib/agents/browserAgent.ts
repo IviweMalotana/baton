@@ -3,7 +3,7 @@ import path from "path";
 import http from "http";
 import https from "https";
 import type { Browser, Page, Locator } from "playwright-core";
-import { completeJson, getAnthropic } from "../anthropic";
+import { completeJson, aiReady } from "../ai/text";
 import { features } from "../env";
 import { CHROMIUM_LAUNCH, chromiumExecutablePath } from "./chromium";
 
@@ -130,7 +130,7 @@ Return the steps as JSON.`,
 
 /** Whether the executor can run for real (needs a key to plan the steps). */
 export function canDriveBrowser(): boolean {
-  return Boolean(features.anthropic && getAnthropic());
+  return Boolean(features.ai && aiReady());
 }
 
 export async function runScenario(

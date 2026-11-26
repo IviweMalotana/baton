@@ -1,4 +1,4 @@
-import { completeJson, getAnthropic } from "../anthropic";
+import { completeJson, aiReady } from "../ai/text";
 import { features } from "../env";
 import { compareCommits, getDefaultBranch, getFile, type DiffFile, type GhClient } from "../github";
 import { canDriveBrowser } from "./browserAgent";
@@ -42,7 +42,7 @@ export async function runAcceptance(
     await ctx.log("No branch preview — acceptance verifies the committed diff by code review.");
   }
 
-  if (ctx.githubToken && ctx.repo && build.committed && features.anthropic && getAnthropic()) {
+  if (ctx.githubToken && ctx.repo && build.committed && features.ai && aiReady()) {
     try {
       return await codeAcceptanceReview(ctx, build, brd);
     } catch (err) {

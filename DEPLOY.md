@@ -21,7 +21,8 @@ to apply the schema and start Next.js. The worker runs in-process.
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`
    - `AUTH_SECRET` = a long random string
    - `APP_URL` = the public URL (for example `https://baton.example.com`)
-   - `ANTHROPIC_API_KEY` = optional, enables the real BRD/planner agents
+   - `DEEPSEEK_API_KEY` = default text provider (discovery, BRD, plan, notes)
+   - `DEEPGRAM_API_KEY` = live stakeholder transcription
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` = optional, enables real PRs
 4. Do **not** set a custom build or start command. `railway.json` and the
    `Dockerfile` handle it.
@@ -50,7 +51,9 @@ Required on both services:
 | `DATABASE_URL` | same Postgres URL | same Postgres URL |
 | `AUTH_SECRET` | required | required |
 | `APP_URL` | public URL | the same public URL |
-| `ANTHROPIC_API_KEY` | optional | optional |
+| `DEEPSEEK_API_KEY` | recommended | Default text provider for every agent. |
+| `DEEPGRAM_API_KEY` | recommended | Live stakeholder transcription. |
+| `ANTHROPIC_API_KEY` | optional | Fallback when no DeepSeek key is set. |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | optional | optional |
 | `EXTERNAL_WORKER` | `true` | leave unset |
 
@@ -77,7 +80,11 @@ Copy the client ID and secret into the environment. The callback must match
 | `DATABASE_URL` | yes | Postgres in production. SQLite is local only. |
 | `AUTH_SECRET` | yes | Long random string. `openssl rand -hex 32`. |
 | `APP_URL` | yes | Public HTTPS URL. Used for OAuth callbacks. |
-| `ANTHROPIC_API_KEY` | recommended | Real BRD, questions and planner output. Falls back without it. |
+| `DEEPSEEK_API_KEY` | recommended | Discovery, BRD, plan, code review and release notes. |
+| `DEEPSEEK_MODEL` | optional | Defaults to `deepseek-flash`. |
+| `DEEPGRAM_API_KEY` | recommended | Speaker-labelled live transcription. Server-side only. |
+| `DEEPGRAM_MODEL` | optional | Defaults to `nova-3`. |
+| `ANTHROPIC_API_KEY` | optional | Fallback if no DeepSeek key is set. |
 | `ANTHROPIC_MODEL` | optional | Defaults to a Sonnet model. |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | optional | Enables GitHub connect and real PRs. |
 | `EXTERNAL_WORKER` | Vercel only | `true` skips the in-process worker. |

@@ -21,19 +21,19 @@ export default async function SpaceSettingsPage({
   const repo = repos.find((r) => r.fullName === repoFullName);
 
   const hasGithub = Boolean(company?.githubConnected);
-  const hasAnthropicKey = Boolean(features.anthropic);
+  const hasAiKey = Boolean(features.ai);
 
   let maskedKey = "";
   if (company?.githubAccessToken) {
     const token = decryptSecret(company.githubAccessToken);
-    if (token) maskedKey = token.slice(0, 8) + "••••••••••••" + token.slice(-4);
+    if (token) maskedKey = token.slice(0, 8) + "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" + token.slice(-4);
   }
 
   return (
     <>
       <div className="main-header">
         <div>
-          <h1>Space Settings — {repo?.fullName.split("/").pop() ?? repoFullName}</h1>
+          <h1>Space Settings â€” {repo?.fullName.split("/").pop() ?? repoFullName}</h1>
           <p>Configure connections and documents for this workspace</p>
         </div>
         <div className="header-actions">
@@ -67,7 +67,7 @@ export default async function SpaceSettingsPage({
                 <div className="conn-name">GitHub Repository</div>
                 <div className="conn-desc">
                   {hasGithub && repo ? (
-                    <>Connected to <strong>{repo.fullName}</strong> · main branch</>
+                    <>Connected to <strong>{repo.fullName}</strong> Â· main branch</>
                   ) : (
                     "Not connected"
                   )}
@@ -83,7 +83,7 @@ export default async function SpaceSettingsPage({
                       rel="noreferrer"
                       style={{ color: "var(--accent)", fontSize: 12, textDecoration: "none" }}
                     >
-                      ↗ Open
+                      â†— Open
                     </a>
                   </>
                 ) : (
@@ -97,17 +97,17 @@ export default async function SpaceSettingsPage({
               </div>
             </div>
 
-            {/* Anthropic */}
+            {/* AI provider */}
             <div className="conn-item">
-              <div className="conn-icon">🤖</div>
+              <div className="conn-icon">ðŸ¤–</div>
               <div className="conn-info">
-                <div className="conn-name">Anthropic API Key</div>
+                <div className="conn-name">DeepSeek (AI provider)</div>
                 <div className="conn-desc">
-                  {hasAnthropicKey ? "Configured via environment variable" : "Not configured"}
+                  {hasAiKey ? "Configured via environment variable" : "Not configured"}
                 </div>
               </div>
               <div className="conn-status">
-                {hasAnthropicKey ? (
+                {hasAiKey ? (
                   <span className="badge badge-connected"><span className="badge-dot" />Active</span>
                 ) : (
                   <span className="badge badge-disconnected">Not set</span>
@@ -117,7 +117,7 @@ export default async function SpaceSettingsPage({
 
             {/* Jira */}
             <div className="conn-item">
-              <div className="conn-icon">📋</div>
+              <div className="conn-icon">ðŸ“‹</div>
               <div className="conn-info">
                 <div className="conn-name">Jira</div>
                 <div className="conn-desc">Link your Jira project for ticket automation</div>
@@ -133,7 +133,7 @@ export default async function SpaceSettingsPage({
             {/* App URLs */}
             <div className="conn-item" style={{ flexDirection: "column", alignItems: "flex-start", gap: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14, width: "100%" }}>
-                <div className="conn-icon">🌐</div>
+                <div className="conn-icon">ðŸŒ</div>
                 <div className="conn-info">
                   <div className="conn-name">Application URLs</div>
                   <div className="conn-desc">Live and testing environments</div>

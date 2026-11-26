@@ -74,7 +74,7 @@ export async function seedRequirements(): Promise<void> {
   if (!can.manageCompany(user.role)) return;
   const company = await db.company.findUnique({ where: { id: user.companyId } });
   if (!company?.githubConnected || !company.githubAccessToken || !company.githubDefaultRepo) return;
-  if (!features.anthropic) return;
+  if (!features.ai) return;
 
   const inFlight = await db.job.findFirst({
     where: { companyId: user.companyId, kind: "seed_requirements", status: { in: ["queued", "running"] } },
@@ -95,7 +95,7 @@ export async function extractDesign(): Promise<void> {
   if (!can.manageCompany(user.role)) return;
   const company = await db.company.findUnique({ where: { id: user.companyId } });
   if (!company?.githubConnected || !company.githubAccessToken || !company.githubDefaultRepo) return;
-  if (!features.anthropic) return;
+  if (!features.ai) return;
 
   const inFlight = await db.job.findFirst({
     where: { companyId: user.companyId, kind: "extract_design", status: { in: ["queued", "running"] } },

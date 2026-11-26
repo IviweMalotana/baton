@@ -1,4 +1,4 @@
-import { completeJson } from "../anthropic";
+import { completeJson } from "../ai/text";
 import { reproduceInBrowser } from "./browser";
 import { runScenario } from "./browserAgent";
 import type { AgentContext, BrdResult } from "./types";

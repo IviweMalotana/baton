@@ -1,4 +1,4 @@
-import { completeText, getAnthropic } from "../anthropic";
+import { completeText, aiReady } from "../ai/text";
 import { features } from "../env";
 import { db } from "../db";
 import { getDefaultBranch, getTree, type GhClient } from "../github";
@@ -238,7 +238,7 @@ export async function runImpactAnalysis(
   ctx: AgentContext,
   brd: BrdResult
 ): Promise<ImpactResult | null> {
-  if (!features.anthropic || !getAnthropic() || !ctx.repo) return null;
+  if (!features.ai || !aiReady() || !ctx.repo) return null;
 
   const candidateRows = await searchRequirements(ctx.request.companyId, {
     query: impactQuery(ctx.request, brd),

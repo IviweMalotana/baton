@@ -6,7 +6,8 @@ tickets, and — after a human approves the requirements — plans, builds, test
 opens the pull request.
 
 ```
-Request -> UX check -> Gherkin BRD -> human approval -> Plan -> Build -> Playwright QA -> PR
+Request -> Discovery (voice + questions) -> brief confirmed -> UX check
+        -> Gherkin BRD -> human approval -> Plan -> Build -> Playwright QA -> PR
 ```
 
 Baton is not a chatbot and not a Jira replacement. It is the requirements and
@@ -16,6 +17,9 @@ Playwright stays the test runner. Baton keeps the thread between them.
 
 ## What it does
 
+- **Interviews the stakeholder.** Captures the conversation live with Deepgram
+  (speaker-labelled) or accepts pasted notes, then asks one clarifying question
+  at a time until every decision is confirmed. Nothing is drafted before that.
 - **Understands the request.** Classifies a bug or a feature, reproduces the bug
   in headless Chromium, or scopes the feature against the repository.
 - **Writes a real BRD.** Plain-language narrative plus `Given / When / Then`
@@ -31,15 +35,17 @@ Playwright stays the test runner. Baton keeps the thread between them.
 - **Keeps the trail.** Every requirement, decision, ticket, branch, PR, test and
   release is linked back to the request that caused it.
 
-Without an Anthropic key, GitHub connection or app URL, each stage degrades to a
-deterministic fallback so the whole pipeline still runs end to end.
+Without a DeepSeek key (Anthropic also works), a Deepgram key, GitHub connection
+or app URL, each stage degrades to a deterministic fallback so the whole pipeline
+still runs end to end.
 
 ## Stack
 
 - Next.js 14 App Router, TypeScript, React Server Components and server actions
 - Prisma + SQLite locally, Postgres in production
 - Self-contained auth: bcrypt + signed JWT session cookie (`jose`)
-- GitHub OAuth, Jira REST v3, Anthropic SDK, Playwright
+- GitHub OAuth, Jira REST v3, DeepSeek (Anthropic fallback), Deepgram streaming,
+  Playwright
 - A durable Postgres-backed job queue with one worker per process
 
 ## Quick start
@@ -125,8 +131,11 @@ See `.env.example` for the full list.
 - `APP_URL` — public base URL; used for OAuth callbacks.
 - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — a GitHub OAuth App with the
   callback `${APP_URL}/api/oauth/github/callback`.
-- `ANTHROPIC_API_KEY` — enables the real BRD, questions and planner agents.
-- `ANTHROPIC_MODEL` — defaults to a Sonnet model.
+- `DEEPSEEK_API_KEY` — the default text provider for discovery, BRD, plan and
+  release notes. `DEEPSEEK_MODEL` defaults to `deepseek-flash`.
+- `DEEPGRAM_API_KEY` — live stakeholder transcription. The browser gets a
+  short-lived token from `/api/deepgram/token`; the key never leaves the server.
+- `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` — optional fallback if no DeepSeek key.
 - `EXTERNAL_WORKER` — set to `true` on a web-only host such as Vercel; run
   `npm run worker` on a long-lived host.
 

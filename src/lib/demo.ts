@@ -516,36 +516,58 @@ export async function seedDemoWorkspace(): Promise<boolean> {
     },
   });
 
-  await db.clarifyingQuestion.createMany({
+  await db.discoveryTurn.createMany({
     data: [
       {
         requestId: csv.id,
-        question: "Which period should the export use: the current calendar month, the selected date range, or all time?",
-        state: "open",
+        role: "stakeholder",
+        content:
+          "Finance reviews rejected expense claims with department heads every month. Today they screenshot the report. They want a CSV with one row per rejected claim, including the rejection reason and the date.",
+        source: "voice",
       },
       {
         requestId: csv.id,
-        question: "Should the CSV include the claimant's email address, or only their name and department?",
-        state: "open",
+        role: "agent",
+        content: "Which period should the export use: the current calendar month, the selected date range, or all time?",
+        source: "text",
       },
       {
         requestId: csv.id,
-        question: "Do you need a fixed column order for an existing finance spreadsheet import?",
-        state: "open",
+        role: "stakeholder",
+        content: "The selected date range on the report, whatever finance has filtered to.",
+        source: "voice",
+      },
+      {
+        requestId: csv.id,
+        role: "agent",
+        content: "Should the CSV include the claimant's email address, or only their name and department?",
+        source: "text",
       },
     ],
+  });
+
+  await db.request.update({
+    where: { id: csv.id },
+    data: {
+      status: "DISCOVERY",
+      discoveryState: "questioning",
+      discoveryTranscript:
+        "Finance reviews rejected expense claims with department heads every month. Today they screenshot the report. They want a CSV with one row per rejected claim, including the rejection reason and the date.",
+      discoveryBrief:
+        "Finance needs a CSV export of rejected expense claims, one row per claim, with the rejection reason and date. The export follows the selected date range on the report. Open: whether the claimant's email is included and whether finance needs a fixed column order.",
+    },
   });
 
   await db.pipelineEvent.createMany({
     data: [
       { requestId: csv.id, stage: "intake", message: "Request filed by Grace Hopper." },
-      { requestId: csv.id, stage: "ux_check", message: "Classified as FEATURE; scoped against the expenses report." },
-      { requestId: csv.id, stage: "questions", message: "Three clarifying questions need an answer before the BRD." },
+      { requestId: csv.id, stage: "discovery", message: "Stakeholder voice captured via Deepgram." },
+      { requestId: csv.id, stage: "discovery", message: "Clarifying question asked: which period the export should use." },
     ],
   });
 
-  // 4. Just filed: queued for the UX check.
-  await db.request.create({
+  // 4. Just filed: discovery has not started yet.
+  const justFiled = await db.request.create({
     data: {
       companyId,
       createdById: stan.id,
@@ -554,10 +576,18 @@ export async function seedDemoWorkspace(): Promise<boolean> {
       description:
         "Customers only see the delivery estimate at checkout. Put the same estimate on the product page, based on the postcode they enter, so they know before they start the basket.",
       type: "FEATURE",
-      status: "INTAKE",
+      status: "DISCOVERY",
+      discoveryState: "capturing",
       priority: "normal",
       repoFullName: "acme/storefront",
     },
+  });
+
+  // Every other seeded request already passed discovery. The two above show
+  // the two live states: mid-interview and not started.
+  await db.request.updateMany({
+    where: { companyId, id: { notIn: [csv.id, justFiled.id] } },
+    data: { discoveryState: "confirmed" },
   });
 
   const release = await db.release.create({

@@ -29,7 +29,8 @@ Vercel and Railway.
    | `DATABASE_URL` | your Postgres connection string |
    | `AUTH_SECRET` | `openssl rand -hex 32` |
    | `APP_URL` | `https://your-domain.example` |
-   | `ANTHROPIC_API_KEY` | optional, for real BRD/planner output |
+   | `DEEPSEEK_API_KEY` | optional, for real BRD/planner output |
+| `DEEPGRAM_API_KEY` | optional, for live stakeholder transcription |
    | `GITHUB_CLIENT_ID` | optional, from the GitHub OAuth App |
    | `GITHUB_CLIENT_SECRET` | optional, from the GitHub OAuth App |
 

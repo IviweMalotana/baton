@@ -12,8 +12,9 @@
  * pipeline still runs end-to-end.
  */
 
-import { features, env } from "../env";
+import { features } from "../env";
 import { runAgentJson } from "../ai/providers";
+import { activeModel } from "../ai/text";
 import type { ReleaseAudience } from "../domain";
 
 export interface ReleaseInputTicket {
@@ -48,7 +49,7 @@ export async function runReleaseNotes(
   tickets: ReleaseInputTicket[],
   modelRouting: string | null | undefined
 ): Promise<ReleaseNotesResult> {
-  if (!features.anthropic || tickets.length === 0) {
+  if (!features.ai || tickets.length === 0) {
     return { notes: fallback(tickets), model: "fallback" };
   }
 
@@ -71,7 +72,7 @@ export async function runReleaseNotes(
         technical: parsed.technical ?? "",
         internal: parsed.internal ?? "",
       },
-      model: env.ANTHROPIC_MODEL,
+      model: activeModel(),
     };
   } catch {
     return { notes: fallback(tickets), model: "fallback" };

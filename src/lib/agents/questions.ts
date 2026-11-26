@@ -10,8 +10,9 @@
  * API key.
  */
 
-import { features, env } from "../env";
+import { features } from "../env";
 import { runAgentJson } from "../ai/providers";
+import { activeModel, aiReady } from "../ai/text";
 import type { AgentContext, UxCheckResult } from "./types";
 
 export interface ClarifyingQuestion {
@@ -39,7 +40,7 @@ export async function runQuestions(
   ux: UxCheckResult,
   modelRouting: string | null | undefined
 ): Promise<QuestionsResult> {
-  if (!features.anthropic) {
+  if (!features.ai || !aiReady()) {
     return fallback(ctx);
   }
 
@@ -65,7 +66,7 @@ ${ux.summary}
     const questions = Array.isArray(parsed.questions)
       ? parsed.questions.filter((q: ClarifyingQuestion) => q && q.question).slice(0, 6)
       : [];
-    return { questions, model: env.ANTHROPIC_MODEL };
+    return { questions, model: activeModel() };
   } catch {
     return fallback(ctx);
   }
