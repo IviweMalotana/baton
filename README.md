@@ -133,12 +133,18 @@ See `.env.example` for the full list.
 ## Deploy
 
 Baton needs a database, a long-lived Node process, and (for real browser QA)
-Chromium. The simplest production shape is **one Railway service with the
-Dockerfile plus a Postgres plugin**. Vercel can serve the web app, but the worker
-must run elsewhere.
+Chromium.
 
-See **[DEPLOY.md](./DEPLOY.md)** for both shapes, the environment contract and
-the GitHub OAuth callback.
+- **One Railway service** (simplest): the Dockerfile plus a Postgres plugin. The
+  web app and worker run together.
+- **Vercel web + Railway worker**: Vercel serves the app, Railway runs the
+  worker and Chromium. Both use the same Postgres.
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FIviweMalotana%2Fbaton)
+
+See **[DEPLOY.md](./DEPLOY.md)** for the single-service shape and
+**[docs/DEPLOY-vercel-railway.md](./docs/DEPLOY-vercel-railway.md)** for the
+Vercel + Railway split.
 
 ## Checks
 
