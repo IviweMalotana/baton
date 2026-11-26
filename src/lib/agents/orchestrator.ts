@@ -1,0 +1,383 @@
+import { db } from "../db";
+import { decryptSecret } from "../crypto";
+import type { Request } from "@prisma/client";
+import type { RequestStatus } from "../domain";
+import type { AgentContext } from "./types";
+import { APP_NAME } from "../brand";
+import { commitFiles, getBranchSha, type GhClient } from "../github";
+import { syncRequirementIndex } from "../requirements/store";
+import { runUxCheck } from "./uxCheck";
+import { runBrd } from "./brd";
+import { runImpactAnalysis, saveImpact, loadImpactDrafts, draftToFile } from "./impact";
+import { checkUiConformance, formatConformanceWarnings } from "./uiFixer";
+import { runPlanner } from "./planner";
+import { runTicketCreation } from "./tickets";
+import { runBuilder } from "./builder";
+import { runAcceptance, runBugFix, runRegression } from "./tester";
+import { resolveTestTarget } from "./preview";
+import { runPr } from "./pr";
+import type { VerificationResult } from "./types";
+
+/**
+ * The pipeline runs in two halves with a human-approval gate between them:
+ *
+ *   Phase 1 (runToApproval):  INTAKE → UX_CHECK → BRD_DRAFTING → AWAITING_APPROVAL
+ *   [human accepts / alters the BRD]
+ *   Phase 2 (runAfterApproval): PLANNING → BUILDING → TESTING → PR_CREATED → DONE
+ *
+ * Stages are awaited sequentially and each persists its artifact + an audit
+ * event. Any thrown error moves the request to FAILED and is recorded.
+ */
+
+async function buildContext(request: Request): Promise<AgentContext> {
+  const company = await db.company.findUnique({
+    where: { id: request.companyId },
+    select: {
+      githubDefaultRepo: true,
+      appBaseUrl: true,
+      previewUrlTemplate: true,
+      githubAccessToken: true,
+      repos: { select: { fullName: true } },
+    },
+  });
+  // Target the request's chosen repo if it's still connected, else the default.
+  const connected = new Set((company?.repos ?? []).map((r) => r.fullName));
+  const repo =
+    request.repoFullName && connected.has(request.repoFullName)
+      ? request.repoFullName
+      : company?.githubDefaultRepo ?? null;
+  return {
+    request,
+    repo,
+    appBaseUrl: company?.appBaseUrl ?? null,
+    previewUrlTemplate: company?.previewUrlTemplate ?? null,
+    githubToken: decryptSecret(company?.githubAccessToken),
+    log: (message, data) =>
+      logEvent(request.id, statusToStage(request.status), message, data),
+  };
+}
+
+function statusToStage(status: string): string {
+  return status.toLowerCase();
+}
+
+export async function logEvent(
+  requestId: string,
+  stage: string,
+  message: string,
+  data?: unknown,
+  level: "info" | "warn" | "error" = "info"
+): Promise<void> {
+  await db.pipelineEvent.create({
+    data: {
+      requestId,
+      stage,
+      level,
+      message,
+      data: data === undefined ? null : JSON.stringify(data),
+    },
+  });
+}
+
+async function setStatus(requestId: string, status: RequestStatus): Promise<Request> {
+  return db.request.update({ where: { id: requestId }, data: { status } });
+}
+
+/** Phase 1: intake → UX check → BRD, then pause for human approval. */
+export async function runToApproval(requestId: string): Promise<void> {
+  let request = await db.request.findUniqueOrThrow({ where: { id: requestId } });
+
+  try {
+    // --- UX check ---
+    request = await setStatus(requestId, "UX_CHECK");
+    let ctx = await buildContext(request);
+    await logEvent(requestId, "ux_check", "UX-check agent started.");
+    const ux = await runUxCheck(ctx);
+    await db.uxCheck.upsert({
+      where: { requestId },
+      create: {
+        requestId,
+        classifiedType: ux.classifiedType,
+        reproduced: ux.reproduced,
+        summary: ux.summary,
+        steps: JSON.stringify(ux.steps),
+        screenshots: JSON.stringify(ux.screenshots),
+      },
+      update: {
+        classifiedType: ux.classifiedType,
+        reproduced: ux.reproduced,
+        summary: ux.summary,
+        steps: JSON.stringify(ux.steps),
+        screenshots: JSON.stringify(ux.screenshots),
+      },
+    });
+    await db.request.update({
+      where: { id: requestId },
+      data: { type: ux.classifiedType },
+    });
+
+    // --- BRD ---
+    request = await setStatus(requestId, "BRD_DRAFTING");
+    ctx = await buildContext(request);
+    await logEvent(requestId, "brd", "BRD agent started.");
+    const brd = await runBrd(ctx, ux);
+    await db.brd.upsert({
+      where: { requestId },
+      create: {
+        requestId,
+        narrative: brd.narrative,
+        gherkin: brd.gherkin,
+        acceptanceCriteria: JSON.stringify(brd.acceptanceCriteria),
+        devOpsNotes: JSON.stringify(brd.devOpsNotes),
+        model: brd.model,
+      },
+      update: {
+        narrative: brd.narrative,
+        gherkin: brd.gherkin,
+        acceptanceCriteria: JSON.stringify(brd.acceptanceCriteria),
+        devOpsNotes: JSON.stringify(brd.devOpsNotes),
+        model: brd.model,
+        version: { increment: 1 },
+      },
+    });
+
+    // --- Impact analysis (best-effort; never blocks the approval gate) ---
+    await logEvent(requestId, "impact", "Analyzing impact on the requirements corpus.");
+    try {
+      const impact = await runImpactAnalysis(ctx, brd);
+      if (impact) await saveImpact(requestId, impact);
+    } catch (err) {
+      await logEvent(
+        requestId,
+        "impact",
+        `Impact analysis skipped: ${(err as Error).message}`,
+        undefined,
+        "warn"
+      );
+    }
+
+    await setStatus(requestId, "AWAITING_APPROVAL");
+    await logEvent(requestId, "approval", "BRD ready — awaiting human decision.");
+  } catch (err) {
+    await failRequest(requestId, err);
+  }
+}
+
+/** Phase 2: after approval → plan → build → test → PR. */
+export async function runAfterApproval(requestId: string): Promise<void> {
+  let request = await db.request.findUniqueOrThrow({ where: { id: requestId } });
+  const brdRow = await db.brd.findUnique({ where: { requestId } });
+  if (!brdRow) throw new Error("Cannot run build phase before a BRD exists");
+  const brd = {
+    narrative: brdRow.narrative,
+    gherkin: brdRow.gherkin,
+    acceptanceCriteria: JSON.parse(brdRow.acceptanceCriteria) as string[],
+    devOpsNotes: JSON.parse(brdRow.devOpsNotes) as string[],
+    model: brdRow.model,
+  };
+
+  try {
+    // --- Planner ---
+    request = await setStatus(requestId, "PLANNING");
+    let ctx = await buildContext(request);
+    await logEvent(requestId, "planner", "Planner agent started.");
+    const plan = await runPlanner(ctx, brd);
+    await db.plan.upsert({
+      where: { requestId },
+      create: {
+        requestId,
+        summary: plan.summary,
+        steps: JSON.stringify(plan.steps),
+        files: JSON.stringify(plan.files),
+      },
+      update: {
+        summary: plan.summary,
+        steps: JSON.stringify(plan.steps),
+        files: JSON.stringify(plan.files),
+      },
+    });
+
+    // --- Delivery tickets (Jira): product ticket + design/backend/frontend,
+    //     plus a devops ticket if the BRD flagged human/MCP-only work.
+    //     Best-effort — a Jira hiccup is logged, never fails the build. ---
+    try {
+      await logEvent(requestId, "tickets", "Filing delivery tickets in Jira.");
+      const outcomes = await runTicketCreation(ctx, brd, plan);
+      if (outcomes.length > 0) {
+        const created = outcomes.filter((o) => o.status === "created").length;
+        await logEvent(requestId, "tickets", `Filed ${created}/${outcomes.length} delivery ticket(s).`);
+      }
+    } catch (err) {
+      await logEvent(
+        requestId,
+        "tickets",
+        `Delivery-ticket creation skipped: ${(err as Error).message}`,
+        undefined,
+        "warn"
+      );
+    }
+
+    // --- Builder ---
+    request = await setStatus(requestId, "BUILDING");
+    ctx = await buildContext(request);
+    await logEvent(requestId, "builder", "Builder agent started.");
+    const build = await runBuilder(ctx, plan, brd);
+    await db.build.upsert({
+      where: { requestId },
+      create: { requestId, branch: build.branch, summary: build.summary, diff: build.diff },
+      update: { branch: build.branch, summary: build.summary, diff: build.diff },
+    });
+
+    // --- Commit approved requirement changes onto the SAME branch, so the PR
+    //     carries code + updated Gherkin together (Phase 3). ---
+    if (ctx.githubToken && ctx.repo && build.committed) {
+      await commitRequirementDrafts(request, ctx, build.branch);
+    }
+
+    // --- UI conformance vs. the design system (Phase 4b, non-blocking). Flags
+    //     violations into the build summary/PR body; never fails the run. ---
+    try {
+      const conf = await checkUiConformance(ctx, build);
+      if (conf && conf.violations.length > 0) {
+        const note = `⚠️ UI conformance: ${formatConformanceWarnings(conf.violations).join("; ")}`;
+        build.summary = `${build.summary}\n\n${note}`;
+        build.diff = `${build.diff}\n\n${note}`;
+        await db.build.update({
+          where: { requestId },
+          data: { summary: build.summary, diff: build.diff },
+        });
+      }
+    } catch (err) {
+      await logEvent(requestId, "ui", `UI conformance check skipped: ${(err as Error).message}`, undefined, "warn");
+    }
+
+    // --- Verification: acceptance → bug-fix review → regression ---
+    // Each is its own stage. Any failing check stops before the PR.
+    // Resolve the URL to test against once — a per-branch preview if the company
+    // configured one (so we test the actual change), else the app URL.
+    const target = await resolveTestTarget(ctx, build.branch, (m) =>
+      logEvent(requestId, "verify", m)
+    );
+    if (target.source !== "none") {
+      await logEvent(requestId, "verify", `Verifying against ${target.source}: ${target.url}`);
+    }
+
+    request = await setStatus(requestId, "TESTING");
+    ctx = await buildContext(request);
+    await logEvent(requestId, "acceptance", "Acceptance testing started.");
+    const acceptance = await runAcceptance(ctx, build, brd, target.url);
+    await persistCheck(requestId, acceptance);
+    if (!acceptance.passed) return stopFailed(requestId, "acceptance", acceptance.summary);
+
+    request = await setStatus(requestId, "BUGFIX_REVIEW");
+    ctx = await buildContext(request);
+    const bugfix = await runBugFix(ctx, target.url);
+    if (bugfix) {
+      await persistCheck(requestId, bugfix);
+      if (!bugfix.passed) return stopFailed(requestId, "bugfix", bugfix.summary);
+    }
+
+    request = await setStatus(requestId, "REGRESSION");
+    ctx = await buildContext(request);
+    const regression = await runRegression(ctx, brd, target.url);
+    if (regression) {
+      await persistCheck(requestId, regression);
+      if (!regression.passed) return stopFailed(requestId, "regression", regression.summary);
+    }
+
+    // --- PR ---
+    request = await setStatus(requestId, "PR_CREATED");
+    ctx = await buildContext(request);
+    await logEvent(requestId, "pr", "PR agent started.");
+    const pr = await runPr(ctx, build, brd);
+    await db.pullRequestRef.upsert({
+      where: { requestId },
+      create: { requestId, number: pr.number, url: pr.url, title: pr.title },
+      update: { number: pr.number, url: pr.url, title: pr.title },
+    });
+
+    await setStatus(requestId, "DONE");
+    await logEvent(requestId, "pr", "Pull request created — pipeline complete.", { url: pr.url });
+  } catch (err) {
+    await failRequest(requestId, err);
+  }
+}
+
+/**
+ * Materialize the request's approved requirement drafts as `.feature` files and
+ * commit them onto the build branch, then re-sync the index from that branch so
+ * search/impact see the updated corpus. Best-effort — a failure here logs but
+ * doesn't sink the pipeline (the code change still ships).
+ */
+async function commitRequirementDrafts(
+  request: Request,
+  ctx: AgentContext,
+  branch: string
+): Promise<void> {
+  try {
+    const drafts = await loadImpactDrafts(request.id);
+    if (drafts.length === 0) return;
+    const client: GhClient = { token: ctx.githubToken!, repo: ctx.repo! };
+    const head = await getBranchSha(client, branch);
+    if (!head) return;
+
+    const files = drafts.map(draftToFile);
+    await commitFiles(client, {
+      branch,
+      baseSha: head,
+      message: `${APP_NAME}: update requirements corpus (${files.length} feature file(s))`,
+      files,
+    });
+    await logEvent(
+      request.id,
+      "requirements",
+      `Committed ${files.length} requirement change(s) to ${branch}.`,
+      { files: files.map((f) => f.path) }
+    );
+
+    try {
+      await syncRequirementIndex({
+        companyId: request.companyId,
+        repo: ctx.repo!,
+        client,
+        ref: branch,
+      });
+    } catch {
+      // index re-sync is non-critical here; it also runs on corpus reseed
+    }
+  } catch (err) {
+    await logEvent(
+      request.id,
+      "requirements",
+      `Could not commit requirement changes: ${(err as Error).message}`,
+      undefined,
+      "warn"
+    );
+  }
+}
+
+async function persistCheck(requestId: string, r: VerificationResult): Promise<void> {
+  const data = {
+    passed: r.passed,
+    summary: r.summary,
+    output: JSON.stringify(r.output),
+    screenshots: JSON.stringify(r.screenshots),
+  };
+  await db.verificationCheck.upsert({
+    where: { requestId_kind: { requestId, kind: r.kind } },
+    create: { requestId, kind: r.kind, ...data },
+    update: data,
+  });
+  await logEvent(requestId, r.kind, r.summary, { passed: r.passed }, r.passed ? "info" : "warn");
+}
+
+async function stopFailed(requestId: string, stage: string, summary: string): Promise<void> {
+  await setStatus(requestId, "FAILED");
+  await logEvent(requestId, stage, `${summary} Stopping before PR.`, undefined, "error");
+}
+
+async function failRequest(requestId: string, err: unknown): Promise<void> {
+  const message = err instanceof Error ? err.message : String(err);
+  await db.request.update({ where: { id: requestId }, data: { status: "FAILED" } });
+  await logEvent(requestId, "pipeline", `Stage failed: ${message}`, undefined, "error");
+}

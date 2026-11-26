@@ -1,0 +1,587 @@
+// Baton — data model (BA-to-QA pipeline)
+//
+// A Company registers with an owner. Owners/admins invite collaborators and
+// assign roles. Stakeholders file Requests. Each Request runs through a
+// pipeline of agent stages, produces artifacts (UX check, BRD, plan, build,
+// test, PR), and pauses for human approval after the BRD is drafted.
+//
+// SQLite by default for zero-setup local dev. To move to Postgres, change
+// `provider` to "postgresql" and update DATABASE_URL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Identity & tenancy
+// ---------------------------------------------------------------------------
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // GitHub connection (per-company repo the pipeline targets)
+  githubConnected    Boolean @default(false)
+  githubLogin        String?
+  githubAvatarUrl    String? // the connected account's avatar, for the UI
+  githubAccessToken  String? // encrypted-at-rest in production; stored plainly in dev
+  githubDefaultRepo  String? // e.g. "acme/webapp"
+  appBaseUrl         String? // where the company's app runs; UX-check drives it
+  previewUrlTemplate String? // per-branch preview URL, e.g. "https://app-{branch}.up.railway.app"
+
+  // AI model routing per agent role (JSON: { ba, ux, qa, impact, questions, release }).
+  // Each value is a logical provider:model (e.g. "anthropic:claude-sonnet-4-5"). An
+  // unset value falls back to ANTHROPIC_MODEL. Centralising this lets a cheaper
+  // model handle classification/extraction while senior-BA reasoning stays on the
+  // strongest tier.
+  modelRouting String @default("{}")
+
+  members      Membership[]
+  requests     Request[]
+  requirements RequirementDoc[]
+  repos        Repo[]
+  projects     Project[]
+  jira         JiraConnection?
+  releases     Release[]
+}
+
+// ---------------------------------------------------------------------------
+// Jira integration
+// ---------------------------------------------------------------------------
+
+model JiraConnection {
+  id             String   @id @default(cuid())
+  companyId      String   @unique
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  baseUrl        String   // https://acme.atlassian.net
+  email          String   // Jira account email for API token auth
+  apiTokenCipher String   // encrypted at rest when AUTH_SECRET is set
+  cloudId        String?  // Atlassian cloud id, resolved after connect
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  issues         JiraIssue[]
+}
+
+model JiraIssue {
+  id           String   @id @default(cuid())
+  connectionId String
+  connection   JiraConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  projectKey   String   // "ENG"
+  issueKey     String   // "ENG-412"
+  issueType    String   // Epic | Story | Task | Bug | Sub-task
+  summary      String
+  status       String
+  assignee     String?
+  priority     String?
+  sprint       String?
+  parentKey    String?  // epic / story parent
+  raw          String   // full issue JSON for later re-reads
+  updatedAt    DateTime @updatedAt
+
+  @@unique([connectionId, issueKey])
+  @@index([connectionId, projectKey])
+}
+
+// A ticket Baton created in Jira for a request, in MVP/delivery structure:
+//   Epic (existing Jira epic, via Request.jiraIssueKey)
+//     └─ Product ticket   — the true deliverable (kind "product")
+//          ├─ Design      — the prototype/UX change (kind "design")
+//          ├─ Backend     — backend changes (kind "backend")
+//          ├─ Frontend    — frontend changes (kind "frontend")
+//          └─ DevOps      — human/MCP-only infra work, only created when the
+//                           BRD surfaced any (kind "devops"; needsHuman=true)
+// One row per (request, kind); re-running ticket creation updates the row in
+// place rather than filing duplicates.
+model DeliveryTicket {
+  id         String   @id @default(cuid())
+  requestId  String
+  request    Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  kind       String   // product | design | backend | frontend | devops
+  parentKey  String?  // epic key (product) or product ticket key (delivery tickets)
+  issueKey   String?  // Jira key once created, e.g. "ENG-413"
+  url        String?  // Jira browse URL
+  title      String
+  body       String   // description used to create/update the issue
+  status     String   @default("pending") // pending | created | failed | skipped
+  error      String?
+  // DevOps tickets only: this work needs a human or an MCP tool and cannot be
+  // completed by the automated build pipeline.
+  needsHuman Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([requestId, kind])
+  @@index([requestId])
+}
+
+// ---------------------------------------------------------------------------
+// Product knowledge model
+// ---------------------------------------------------------------------------
+
+// A Project groups one Jira project + one GitHub repo + the knowledge-model
+// baseline the platform builds for them. A company can have many projects.
+model Project {
+  id             String   @id @default(cuid())
+  companyId      String
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name           String
+  slug           String
+  repoFullName   String?  // owner/name
+  jiraProjectKey String?  // "ENG"
+  baselineAt     DateTime? // when the baseline last ran
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  modules       Module[]
+  screens       Screen[]
+  routes        Route[]
+  components    UiComponent[]
+  entities      Entity[]
+  apis          Api[]
+  businessRules BusinessRule[]
+  journeys      UserJourney[]
+  decisions     Decision[]
+  releases      Release[]
+  requests      Request[]
+
+  @@unique([companyId, slug])
+  @@index([companyId])
+}
+
+// A grouping of related screens/routes/entities (e.g. "Checkout").
+model Module {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  summary   String   @default("")
+  evidence  String   @default("{}") // JSON: { files: string[], notes: string }
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, name])
+}
+
+// A page/view in the app.
+model Screen {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String   // "Order details"
+  routeId   String?  // optional link to its primary route
+  purpose   String   @default("")
+  states    String   @default("[]") // JSON: ["loading","empty","error","success"]
+  evidence  String   @default("{}") // JSON: { files, screenshots }
+  // 'observed' | 'inferred' | 'unknown' | 'confirmed'
+  confidence String   @default("inferred")
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, name])
+}
+
+model Route {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  path      String   // "/orders/[id]"
+  method    String   @default("GET") // for API routes
+  kind      String   @default("page") // page | api
+  evidence  String   @default("{}")
+
+  @@unique([projectId, kind, method, path])
+}
+
+model UiComponent {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  filePath  String   @default("")
+  summary   String   @default("")
+
+  @@unique([projectId, name])
+}
+
+// An ERD-style entity derived from the data layer (Prisma / SQL / ORM).
+model Entity {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  fields    String   @default("[]") // JSON: [{ name, type, nullable, pk, fk }]
+  relations String   @default("[]") // JSON: [{ to, kind }]
+  filePath  String   @default("")
+
+  @@unique([projectId, name])
+}
+
+model Api {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  method    String   // GET | POST | ...
+  path      String   // "/api/orders/:id"
+  summary   String   @default("")
+  request   String   @default("{}") // JSON schema stub
+  response  String   @default("{}")
+  filePath  String   @default("")
+
+  @@unique([projectId, method, path])
+}
+
+model BusinessRule {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rule      String   // "An order below MOQ 100 is rejected"
+  source    String   // where it came from: file:line / jira:ENG-412 / human
+  moduleId  String?
+  createdAt DateTime @default(now())
+}
+
+model UserJourney {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  steps     String   @default("[]") // JSON: [{ screenId?, action }]
+  outcome   String   @default("")
+
+  @@unique([projectId, name])
+}
+
+model Decision {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title     String
+  context   String   @default("")
+  decision  String
+  consequences String @default("")
+  decidedAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Releases
+// ---------------------------------------------------------------------------
+
+model Release {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  version     String   // "2026.10.1"
+  summary     String   @default("")
+  // JSON array of { requestId, prUrl, title }
+  ticketLinks String   @default("[]")
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+  notes       ReleaseNote[]
+
+  @@index([companyId])
+}
+
+model ReleaseNote {
+  id        String   @id @default(cuid())
+  releaseId String
+  release   Release  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  audience  String   // "user" | "technical" | "internal"
+  body      String   // markdown
+
+  @@unique([releaseId, audience])
+}
+
+// A GitHub repository connected to a company. A company connects GitHub once
+// (OAuth) and can attach several repos; one is the default the pipeline targets
+// when a request doesn't pick a specific one. `githubDefaultRepo` on Company
+// mirrors the default repo's fullName for backward-compatible reads.
+model Repo {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  fullName  String // "owner/name"
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@unique([companyId, fullName])
+  @@index([companyId])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships Membership[]
+  createdRequests Request[] @relation("RequestCreatedBy")
+  decisions   Approval[]
+}
+
+// NOTE: SQLite doesn't support native enums, so role/type/status/decision are
+// stored as strings. The allowed values live in `src/lib/domain.ts` as
+// string-literal union types (Role, RequestType, RequestStatus,
+// ApprovalDecision). Switch the datasource to Postgres to use real enums.
+
+model Membership {
+  id        String   @id @default(cuid())
+  role      String   @default("COLLABORATOR") // Role
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([companyId])
+}
+
+// ---------------------------------------------------------------------------
+// Requests & pipeline
+// ---------------------------------------------------------------------------
+
+model Request {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  type        String   @default("UNKNOWN") // RequestType
+  status      String   @default("INTAKE") // RequestStatus
+  priority    String   @default("normal") // low | normal | high
+  repoFullName String? // which connected repo this request targets (null → company default)
+  // Optional Jira issue this Baton request is driving. The Jira ticket remains the
+  // delivery source of truth; Baton drives the BA/QA pipeline on top of it.
+  // If set, treated as the EPIC the generated product ticket is filed under.
+  jiraIssueKey String?
+  // Optional link to a design prototype/mockup (e.g. Figma) for this change,
+  // attached to the generated Design delivery ticket.
+  designPrototypeUrl String?
+  projectId    String?
+  project      Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User   @relation("RequestCreatedBy", fields: [createdById], references: [id])
+
+  uxCheck   UxCheck?
+  brd       Brd?
+  plan      Plan?
+  build     Build?
+  impact    RequirementImpact?
+  checks    VerificationCheck[]
+  pullReq   PullRequestRef?
+  approvals Approval[]
+  events    PipelineEvent[]
+  questions ClarifyingQuestion[]
+  tickets   DeliveryTicket[]
+
+  @@index([companyId])
+  @@index([status])
+}
+
+// Per-request impact analysis against the living requirements corpus: which
+// existing requirements this request AFFECTS, and the drafted new/updated
+// Gherkin the pipeline will commit alongside the code (Phase 3).
+model RequirementImpact {
+  id        String   @id @default(cuid())
+  requestId String   @unique
+  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  summary   String   @default("")
+  related   String   @default("[]") // JSON: [{ reqId, title, category, filePath, affected, reason }]
+  drafts    String   @default("[]") // JSON: [{ op, reqId?, category, title, filePath, body, codeAreas }]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// UX-check agent output: classifies bug vs feature and either reproduces the
+// bug (Playwright/MCP) or analyzes the feature against the code.
+model UxCheck {
+  id             String   @id @default(cuid())
+  requestId      String   @unique
+  request        Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  classifiedType String // RequestType (BUG | FEATURE)
+  reproduced     Boolean  @default(false) // for bugs: was it reproduced?
+  summary        String   // human-readable finding
+  steps          String   // JSON array of reproduction / investigation steps
+  screenshots    String   // JSON array of artifact paths (stubbed for now)
+  createdAt      DateTime @default(now())
+}
+
+// BRD agent output: business/UX-facing requirements in Gherkin
+// (Given / When / Then) plus a plain-language narrative.
+model Brd {
+  id                 String   @id @default(cuid())
+  requestId          String   @unique
+  request            Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  narrative          String   // plain-language BRD, BA/UX voice (no dev jargon)
+  gherkin            String   // Feature: ... Scenario ... Given/When/Then
+  acceptanceCriteria String   // JSON array of acceptance-criteria bullet strings
+  // JSON array of plain-language notes naming infra/third-party work (deploy
+  // config, env vars, DNS, Railway/Vercel/Resend changes, ...) that needs a
+  // human or an MCP tool to carry out — the coding agent cannot do these from
+  // a PR. Surfaced on its own DevOps delivery ticket, never folded into the
+  // product ticket.
+  devOpsNotes        String   @default("[]")
+  model              String   // which Anthropic model produced it
+  version            Int      @default(1)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Approval {
+  id        String   @id @default(cuid())
+  requestId String
+  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  decision  String // ApprovalDecision (ACCEPTED | REJECTED | ALTERED)
+  note      String? // reason / change notes
+  createdAt DateTime @default(now())
+
+  @@index([requestId])
+}
+
+model Plan {
+  id        String   @id @default(cuid())
+  requestId String   @unique
+  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  summary   String
+  steps     String   // JSON array of plan steps
+  files     String   // JSON array of files the builder is expected to touch
+  createdAt DateTime @default(now())
+}
+
+model Build {
+  id         String   @id @default(cuid())
+  requestId  String   @unique
+  request    Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  branch     String
+  summary    String
+  diff       String   // unified diff (stubbed for now)
+  createdAt  DateTime @default(now())
+}
+
+// One record per verification check (acceptance UX, bug-fix review,
+// regression). Each is its own pipeline stage with its own card + screenshots.
+model VerificationCheck {
+  id          String   @id @default(cuid())
+  requestId   String
+  request     Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  kind        String // "acceptance" | "bugfix" | "regression"
+  passed      Boolean  @default(false)
+  summary     String
+  output      String // JSON array of result lines
+  screenshots String   @default("[]") // JSON array of artifact paths
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([requestId, kind])
+  @@index([requestId])
+}
+
+model PullRequestRef {
+  id        String   @id @default(cuid())
+  requestId String   @unique
+  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  number    Int?
+  url       String
+  title     String
+  createdAt DateTime @default(now())
+}
+
+// Searchable index of the living requirements corpus. The source of truth is
+// version-controlled files in the target repo (requirements/<category>/REQ-*.md);
+// Baton mirrors them here so it can search and run impact analysis quickly.
+// Re-synced from the repo whenever a PR that touches requirements merges.
+model RequirementDoc {
+  id              String   @id @default(cuid())
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  repo            String // owner/name the requirement belongs to
+  reqId           String // stable id in the file, e.g. REQ-ab12cd34
+  category        String // ux | design | backend | data | api
+  title           String
+  status          String   @default("accepted") // draft | accepted | superseded
+  version         Int      @default(1)
+  related         String   @default("[]") // JSON array of related reqIds
+  codeAreas       String   @default("[]") // JSON array of file paths/globs it governs
+  body            String // the behavior spec (markdown)
+  filePath        String // requirements/<category>/REQ-*.md
+  updatedBySource String? // requestId that last changed it
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([companyId, reqId])
+  @@index([companyId])
+  @@index([companyId, category])
+}
+
+// Background work queue. Filing a request (or approving a BRD) enqueues a Job;
+// an in-process worker runs the pipeline off the request path. Durable, so
+// queued work survives a restart.
+model Job {
+  id        String   @id @default(cuid())
+  requestId String   @default("") // the request this job runs for ("" for company-scoped jobs)
+  companyId String? // set for company-scoped jobs (e.g. seed_requirements)
+  kind      String // "to_approval" | "after_approval" | "seed_requirements"
+  status    String   @default("queued") // queued | running | done | error
+  attempts  Int      @default(0)
+  error     String?
+  result    String? // optional JSON summary of the outcome (e.g. seeded PR)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([companyId, kind])
+}
+
+// Append-only audit trail of everything the pipeline does.
+model PipelineEvent {
+  id        String   @id @default(cuid())
+  requestId String
+  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  stage     String   // e.g. "ux_check", "brd", "approval", "planner"
+  level     String   @default("info") // info | warn | error
+  message   String
+  data      String? // JSON blob of stage detail
+  createdAt DateTime @default(now())
+
+  @@index([requestId])
+}
+
+// ---------------------------------------------------------------------------
+// Clarifying questions (BA agent)
+// ---------------------------------------------------------------------------
+//
+// Before writing requirements, the BA agent surfaces things it cannot answer
+// from the brief, Jira, or the code. These block the pipeline at QUESTIONS
+// until a human answers (or marks them N/A). The answered set is fed back
+// into the BRD stage as explicit assumptions.
+model ClarifyingQuestion {
+  id        String   @id @default(cuid())
+  requestId String
+  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  question  String
+  // open | answered | dismissed
+  state     String   @default("open")
+  answer    String?
+  answeredBy String?
+  answeredAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([requestId])
+}

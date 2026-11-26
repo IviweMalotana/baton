@@ -1,0 +1,76 @@
+import type { Request } from "@prisma/client";
+import type { RequestType } from "../domain";
+
+/**
+ * Every agent stage receives the request it operates on plus a logger to append
+ * to the pipeline audit trail, and returns a structured result the orchestrator
+ * persists. Keeping this uniform is what lets us swap a stub for a real
+ * implementation (Playwright, a real builder, etc.) without touching the
+ * orchestrator.
+ */
+export interface AgentContext {
+  request: Request;
+  /** Company GitHub repo the pipeline targets, if connected. */
+  repo?: string | null;
+  /** Base URL of the company's running app, for the UX-check browser pass. */
+  appBaseUrl?: string | null;
+  /** Per-branch preview URL template, e.g. "https://app-{branch}.up.railway.app". */
+  previewUrlTemplate?: string | null;
+  /** Company's stored GitHub OAuth token, for the PR agent. */
+  githubToken?: string | null;
+  log: (message: string, data?: unknown) => Promise<void>;
+}
+
+export interface UxCheckResult {
+  classifiedType: Exclude<RequestType, "UNKNOWN">;
+  reproduced: boolean;
+  summary: string;
+  steps: string[];
+  screenshots: string[];
+}
+
+export interface BrdResult {
+  narrative: string;
+  gherkin: string;
+  acceptanceCriteria: string[];
+  /**
+   * Plain-language notes naming infra/third-party work the automated build
+   * pipeline cannot do itself — deploy config, env vars, DNS, Railway/Vercel/
+   * Resend changes, secrets, etc. — and so needs a human or an MCP tool.
+   * Empty when the request has no such implications.
+   */
+  devOpsNotes: string[];
+  model: string;
+}
+
+export interface PlanResult {
+  summary: string;
+  steps: string[];
+  files: string[];
+}
+
+export interface BuildResult {
+  branch: string;
+  summary: string;
+  diff: string;
+  /** True when real code changes were committed to the branch on GitHub. */
+  committed: boolean;
+  /** Paths the builder changed/created (empty in the stub path). */
+  filesChanged: string[];
+}
+
+export type VerificationKind = "acceptance" | "bugfix" | "regression";
+
+export interface VerificationResult {
+  kind: VerificationKind;
+  passed: boolean;
+  summary: string;
+  output: string[];
+  screenshots: string[];
+}
+
+export interface PrResult {
+  number: number | null;
+  url: string;
+  title: string;
+}
