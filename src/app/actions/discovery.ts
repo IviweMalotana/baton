@@ -199,7 +199,7 @@ async function advance(
         data: { discoveryState: "questioning", discoveryBrief: decision.summary },
       }),
     ]);
-    await logEvent(requestId, "discovery", "Clarifying question asked.", {
+    await logEvent(requestId, "discovery", `Clarifying question asked (${decision.model}).`, {
       reason: decision.reason,
       openItems: decision.openItems,
       model: decision.model,
@@ -214,7 +214,6 @@ async function advance(
   await logEvent(
     requestId,
     "discovery",
-    "Every open point is answered. Brief ready for the stakeholder to confirm.",
-    { model: decision.model }
+    `Every open point is answered (${decision.model}). Brief ready for the stakeholder to confirm.`
   );
 }

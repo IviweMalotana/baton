@@ -105,7 +105,6 @@ Decide the next step.`;
       routing: input.routing ?? null,
       req: { system: SYSTEM, user, maxTokens: 900 },
     });
-
     const status = parsed.status === "ready" ? "ready" : "question";
     const question = typeof parsed.question === "string" ? parsed.question.trim() : null;
     const reason = typeof parsed.reason === "string" ? parsed.reason.trim() : null;
@@ -134,7 +133,8 @@ Decide the next step.`;
       openItems,
       model: activeModel(),
     };
-  } catch {
+  } catch (err) {
+    console.error("[discovery] model call failed:", err);
     return fallback(input, stakeholderTurns);
   }
 }
