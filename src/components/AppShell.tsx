@@ -62,7 +62,7 @@ export function AppShell({
         </div>
       </header>
 
-      <main>{children}</main>
+      <main className="appv2-body">{children}</main>
     </div>
   );
 }
