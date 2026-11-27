@@ -56,7 +56,8 @@ export function DiscoveryPanel({
   const [captured, setCaptured] = useState("");
   const [savingVoice, setSavingVoice] = useState(false);
 
-  const wsRef = useRef<WebSocket | null>(null);
+  const audioRef = useRef<ReadableStreamDefaultController<Uint8Array> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const finalRef = useRef("");
@@ -90,16 +91,66 @@ export function DiscoveryPanel({
       }
       streamRef.current?.getTracks().forEach((t) => t.stop());
       try {
-        wsRef.current?.close();
+        audioRef.current?.close();
       } catch {
         /* already closed */
       }
+      abortRef.current?.abort();
     };
   }, []);
 
   const last = turns.length > 0 ? turns[turns.length - 1] : null;
   const awaitingAnswer = last?.role === "agent" && state !== "ready" && state !== "confirmed";
   const confirmed = state === "confirmed";
+
+  function handleTranscript(data: DeepgramMessage) {
+    if (data.type !== "Results") return;
+    const alt = data.channel?.alternatives?.[0];
+    const transcript = alt?.transcript?.trim();
+    if (!transcript) return;
+
+    if (data.is_final) {
+      const speaker = alt?.words?.[0]?.speaker;
+      const line = speaker === undefined ? transcript : `Speaker ${speaker + 1}: ${transcript}`;
+      finalRef.current = `${finalRef.current} ${line}`.trim();
+      setCaptured(finalRef.current);
+      setInterim("");
+    } else {
+      setInterim(transcript);
+    }
+  }
+
+  async function pump(response: Response) {
+    if (!response.body) return;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nl: number;
+        while ((nl = buffer.indexOf("\n")) !== -1) {
+          const line = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 1);
+          if (!line) continue;
+          try {
+            handleTranscript(JSON.parse(line) as DeepgramMessage);
+          } catch {
+            /* keep-alive or partial line */
+          }
+        }
+      }
+    } catch (err) {
+      if (!stoppingRef.current) {
+        setVoiceError(`The Deepgram stream stopped: ${(err as Error).message}`);
+      }
+    } finally {
+      setListening(false);
+      setConnecting(false);
+    }
+  }
 
   async function startListening() {
     setVoiceError(null);
@@ -114,86 +165,63 @@ export function DiscoveryPanel({
       });
       streamRef.current = stream;
 
-      const res = await fetch("/api/deepgram/token", { method: "POST" });
-      const body = (await res.json()) as { token?: string; error?: string };
-      if (!res.ok || !body.token) {
-        throw new Error(body.error ?? "Deepgram is not available.");
+      const preferred = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find(
+        (m) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(m)
+      );
+      const mime = preferred ?? "audio/webm";
+
+      // A live body: MediaRecorder chunks are pushed as they arrive and the
+      // server pipes them to Deepgram with the key attached.
+      const audio = new ReadableStream<Uint8Array>({
+        start(controller) {
+          audioRef.current = controller;
+        },
+      });
+      const abort = new AbortController();
+      abortRef.current = abort;
+
+      const init = {
+        method: "POST",
+        headers: { "content-type": mime },
+        body: audio,
+        signal: abort.signal,
+        duplex: "half",
+      } as RequestInit & { duplex: "half" };
+
+      const response = await fetch("/api/deepgram/stream", init);
+      if (!response.ok) {
+        const detail = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(detail.error ?? `Deepgram returned ${response.status}.`);
       }
 
-      const params = new URLSearchParams({
-        model: deepgramModel,
-        language: "en",
-        smart_format: "true",
-        punctuate: "true",
-        diarize: "true",
-        interim_results: "true",
-        utterance_end_ms: "1200",
-        vad_events: "true",
-      });
-      const ws = new WebSocket(`wss://api.deepgram.com/v1/listen?${params.toString()}`, [
-        "token",
-        body.token,
-      ]);
-      ws.binaryType = "arraybuffer";
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        const preferred = [
-          "audio/webm;codecs=opus",
-          "audio/webm",
-          "audio/mp4",
-        ].find((m) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(m));
-        const recorder = preferred
-          ? new MediaRecorder(stream, { mimeType: preferred })
-          : new MediaRecorder(stream);
-
-        recorder.ondataavailable = async (event) => {
-          if (event.data.size === 0 || ws.readyState !== WebSocket.OPEN) return;
-          ws.send(await event.data.arrayBuffer());
-        };
-        recorder.start(250);
-        recorderRef.current = recorder;
-        setListening(true);
-        setConnecting(false);
-      };
-
-      ws.onmessage = (event) => {
-        let data: DeepgramMessage;
+      const recorder = preferred
+        ? new MediaRecorder(stream, { mimeType: preferred })
+        : new MediaRecorder(stream);
+      recorder.ondataavailable = async (event) => {
+        if (event.data.size === 0) return;
         try {
-          data = JSON.parse(String(event.data)) as DeepgramMessage;
+          audioRef.current?.enqueue(new Uint8Array(await event.data.arrayBuffer()));
         } catch {
-          return;
-        }
-        if (data.type !== "Results") return;
-        const alt = data.channel?.alternatives?.[0];
-        const transcript = alt?.transcript?.trim();
-        if (!transcript) return;
-
-        if (data.is_final) {
-          const speaker = alt?.words?.[0]?.speaker;
-          const line = speaker === undefined ? transcript : `Speaker ${speaker + 1}: ${transcript}`;
-          finalRef.current = `${finalRef.current} ${line}`.trim();
-          setCaptured(finalRef.current);
-          setInterim("");
-        } else {
-          setInterim(transcript);
+          /* controller closed while the last chunk drained */
         }
       };
+      recorder.start(250);
+      recorderRef.current = recorder;
 
-      ws.onerror = () => {
-        setVoiceError("The Deepgram connection failed. Check the key and try again.");
-        setListening(false);
-        setConnecting(false);
-      };
-
-      ws.onclose = () => {
-        setListening(false);
-        setConnecting(false);
-      };
+      setListening(true);
+      setConnecting(false);
+      void pump(response);
     } catch (err) {
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
-      wsRef.current = null;
+      try {
+        audioRef.current?.close();
+      } catch {
+        /* already closed */
+      }
+      audioRef.current = null;
+      abortRef.current?.abort();
+      abortRef.current = null;
       setVoiceError((err as Error).message);
       setConnecting(false);
       setListening(false);
@@ -203,8 +231,6 @@ export function DiscoveryPanel({
   async function stopListening() {
     if (stoppingRef.current) return;
     stoppingRef.current = true;
-    const ws = wsRef.current;
-    const text = finalRef.current.trim();
 
     try {
       recorderRef.current?.stop();
@@ -215,23 +241,20 @@ export function DiscoveryPanel({
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
 
+    // Closing the upload body lets Deepgram flush the final words before the
+    // response ends.
     try {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "CloseStream" }));
-      }
-    } catch {
-      /* socket already closing */
-    }
-    try {
-      ws?.close();
+      audioRef.current?.close();
     } catch {
       /* already closed */
     }
-    wsRef.current = null;
+    audioRef.current = null;
     setListening(false);
-    setConnecting(false);
     setInterim("");
 
+    await new Promise((resolve) => setTimeout(resolve, 700));
+
+    const text = finalRef.current.trim();
     if (text) {
       setSavingVoice(true);
       try {
@@ -269,7 +292,6 @@ export function DiscoveryPanel({
 
       {voiceError && <div className="error">{voiceError}</div>}
 
-      {/* Confirmed brief */}
       {confirmed && brief && (
         <div className="notice" style={{ borderLeftColor: "var(--accent)" }}>
           <strong>Confirmed brief</strong>
@@ -277,7 +299,6 @@ export function DiscoveryPanel({
         </div>
       )}
 
-      {/* Live capture */}
       {!confirmed && (
         <div className="card" style={{ background: "var(--surface-2, #f7f7f8)" }}>
           <div className="row" style={{ alignItems: "center" }}>
@@ -344,7 +365,6 @@ export function DiscoveryPanel({
         </div>
       )}
 
-      {/* Interview */}
       {turns.length > 0 && (
         <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
           {turns.map((turn) => (
@@ -355,7 +375,10 @@ export function DiscoveryPanel({
                 maxWidth: "86%",
               }}
             >
-              <div className="small muted" style={{ textAlign: turn.role === "agent" ? "left" : "right" }}>
+              <div
+                className="small muted"
+                style={{ textAlign: turn.role === "agent" ? "left" : "right" }}
+              >
                 {turn.role === "agent" ? "Baton" : "Stakeholder"}
                 {turn.source === "voice" ? " · voice" : ""}
               </div>
@@ -376,7 +399,6 @@ export function DiscoveryPanel({
         </div>
       )}
 
-      {/* Next step */}
       {!confirmed && (
         <div style={{ marginTop: 14 }}>
           {awaitingAnswer ? (

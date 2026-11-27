@@ -2,7 +2,7 @@
 
 **The AI senior BA for software teams.** A stakeholder files a request. Baton
 investigates it, writes the business requirements as Gherkin, files the Jira
-tickets, and — after a human approves the requirements — plans, builds, tests and
+tickets, and â€” after a human approves the requirements â€” plans, builds, tests and
 opens the pull request.
 
 ```
@@ -77,7 +77,7 @@ anything:
 | Stakeholder | `stan@acme.test` | `password123` |
 
 You can also just press **Explore the demo** on the login page. To create your
-own workspace, register at `/register` — the first user owns the company and can
+own workspace, register at `/register` â€” the first user owns the company and can
 invite the rest of the team.
 
 ## How it fits together
@@ -126,17 +126,17 @@ immediately.
 
 See `.env.example` for the full list.
 
-- `DATABASE_URL` — SQLite file locally; Postgres in production.
-- `AUTH_SECRET` — signs session cookies. Use a long random string.
-- `APP_URL` — public base URL; used for OAuth callbacks.
-- `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — a GitHub OAuth App with the
+- `DATABASE_URL` â€” SQLite file locally; Postgres in production.
+- `AUTH_SECRET` â€” signs session cookies. Use a long random string.
+- `APP_URL` â€” public base URL; used for OAuth callbacks.
+- `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` â€” a GitHub OAuth App with the
   callback `${APP_URL}/api/oauth/github/callback`.
-- `DEEPSEEK_API_KEY` — the default text provider for discovery, BRD, plan and
+- `DEEPSEEK_API_KEY` â€” the default text provider for discovery, BRD, plan and
   release notes. `DEEPSEEK_MODEL` defaults to `deepseek-flash`.
-- `DEEPGRAM_API_KEY` — live stakeholder transcription. The browser gets a
-  short-lived token from `/api/deepgram/token`; the key never leaves the server.
-- `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` — optional fallback if no DeepSeek key.
-- `EXTERNAL_WORKER` — set to `true` on a web-only host such as Vercel; run
+- `DEEPGRAM_API_KEY` - live stakeholder transcription. The browser streams audio
+  to `/api/deepgram/stream`; the key never leaves the server.
+- `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` â€” optional fallback if no DeepSeek key.
+- `EXTERNAL_WORKER` â€” set to `true` on a web-only host such as Vercel; run
   `npm run worker` on a long-lived host.
 
 ## Deploy

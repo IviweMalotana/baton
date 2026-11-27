@@ -1,4 +1,4 @@
-# Deploying Baton
+﻿# Deploying Baton
 
 Baton is a Next.js app with a durable background worker and, for real QA, a
 headless Chromium. That means it needs three things in production:

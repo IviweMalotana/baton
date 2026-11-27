@@ -36,7 +36,7 @@ export async function GET() {
     const reply = await completeText({
       system: "You are a connectivity check.",
       user: "Reply with the single word: pong",
-      maxTokens: 16,
+      maxTokens: 200,
     });
     return NextResponse.json({
       ...base,

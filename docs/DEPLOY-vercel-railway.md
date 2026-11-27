@@ -1,4 +1,4 @@
-# Deploy Baton: Vercel web + Railway worker
+﻿# Deploy Baton: Vercel web + Railway worker
 
 This is the split shape. Vercel serves the Next.js app and API routes. Railway
 runs the background worker and, because the repo's Dockerfile is based on the
@@ -18,7 +18,7 @@ Vercel and Railway.
 ## 2. Deploy the web app to Vercel
 
 1. Push this repo to GitHub.
-2. In Vercel, **Add New → Project → Import Git Repository** and pick `baton`.
+2. In Vercel, **Add New â†’ Project â†’ Import Git Repository** and pick `baton`.
 3. Framework preset: **Next.js**. Leave the build command alone; `vercel.json`
    runs the Postgres schema switch, Prisma generate, `prisma db push` and
    `next build`.
@@ -40,7 +40,7 @@ Vercel and Railway.
 
 ## 3. Deploy the worker to Railway
 
-1. In Railway, **New Project → Deploy from GitHub repo** and pick `baton`.
+1. In Railway, **New Project â†’ Deploy from GitHub repo** and pick `baton`.
 2. Create a second service from the same repo, or use one service with the
    worker start command. Set the service's config-as-code path to
    `railway.worker.json`, or set the start command to `npm run worker`.
@@ -58,7 +58,7 @@ Create an OAuth App at <https://github.com/settings/developers>:
 - Authorization callback URL: `${APP_URL}/api/oauth/github/callback`
 
 Add the client ID and secret to both services and redeploy. Then connect GitHub
-from **Settings → Connect GitHub**.
+from **Settings â†’ Connect GitHub**.
 
 ## 5. Verify
 

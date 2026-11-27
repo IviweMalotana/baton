@@ -133,9 +133,16 @@ async function deepSeekText(args: {
       throw err;
     }
     const data = JSON.parse(res.body) as {
-      choices?: { message?: { content?: string } }[];
+      choices?: { message?: { content?: string }; finish_reason?: string }[];
     };
-    return (data.choices?.[0]?.message?.content ?? "").trim();
+    const choice = data.choices?.[0];
+    const text = (choice?.message?.content ?? "").trim();
+    if (!text) {
+      throw new Error(
+        `DeepSeek returned an empty answer (finish: ${choice?.finish_reason ?? "unknown"}).`
+      );
+    }
+    return text;
   });
 }
 
