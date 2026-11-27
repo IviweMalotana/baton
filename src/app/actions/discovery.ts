@@ -180,6 +180,8 @@ async function advance(
     where: { id: companyId },
     select: { modelRouting: true },
   });
+  const { getCompanyContext } = await import("@/lib/knowledge/context");
+  const companyContext = await getCompanyContext(companyId);
 
   const decision = await nextDiscoveryStep({
     title: request.title,
@@ -187,6 +189,7 @@ async function advance(
     transcript: request.discoveryTranscript,
     turns: request.discoveryTurns.map((t) => ({ role: t.role, content: t.content })),
     routing: company?.modelRouting ?? null,
+    companyContext,
   });
 
   if (decision.status === "question" && decision.question) {

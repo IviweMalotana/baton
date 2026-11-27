@@ -23,64 +23,86 @@ export default async function Dashboard() {
     db.membership.count({ where: { companyId: user.companyId } }),
   ]);
 
+  const firstName = user.name?.split(" ")[0] || "there";
+
   return (
-    <div>
-      <div className="row">
-        <h2 style={{ margin: 0 }}>Dashboard</h2>
-        <div className="spacer" />
+    <div className="page">
+      <header className="page-head">
+        <div>
+          <p className="eyebrow">Workspace</p>
+          <h1>
+            {company?.name ?? "Your workspace"}
+          </h1>
+          <p className="lede">
+            Good to see you, {firstName}. Start with the next change, or pick up
+            one that is waiting.
+          </p>
+        </div>
         <Link href="/requests/new" className="btn">
           New request
         </Link>
+      </header>
+
+      <div className="grid cols-3" style={{ marginBottom: 14 }}>
+        <div className="stat">
+          <div className="stat-label">Awaiting you</div>
+          <div className="stat-value">{awaiting}</div>
+          <div className="stat-sub">Briefs to confirm or approve</div>
+        </div>
+        <div className="stat">
+          <div className="stat-label">Shipped</div>
+          <div className="stat-value">{done}</div>
+          <div className="stat-sub">Pull requests opened</div>
+        </div>
+        <div className="stat">
+          <div className="stat-label">The team</div>
+          <div className="stat-value">{memberCount}</div>
+          <div className="stat-sub">People in this workspace</div>
+        </div>
       </div>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>Recent requests</h2>
+            <p className="muted small">{total} in total</p>
+          </div>
+          <Link href="/requests" className="link-button">
+            View all
+          </Link>
+        </div>
+        <div className="panel-body">
+          {recent.length === 0 ? (
+            <p className="muted">
+              Nothing yet. <Link href="/requests/new">Start the first interview →</Link>
+            </p>
+          ) : (
+            <table>
+              <tbody>
+                {recent.map((r) => (
+                  <tr key={r.id}>
+                    <td>
+                      <Link href={`/requests/${r.id}`}>{r.title}</Link>
+                    </td>
+                    <td style={{ width: 170 }}>
+                      <span className="badge status">{statusLabel(r.status)}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </section>
 
       {!company?.githubConnected && (
-        <div className="notice">
-          GitHub isn't connected yet. Connect it in{" "}
-          <Link href="/settings">Settings</Link> so the pipeline can open PRs
-          against your repo.
+        <div className="notice" style={{ marginTop: 14 }}>
+          Jira and GitHub are not connected yet.<br />
+          <Link href="/settings" className="link-button">
+            Connect them in Settings →
+          </Link>
         </div>
       )}
-
-      <div className="grid cols-2">
-        <div className="card">
-          <div className="muted small">Requests awaiting your approval</div>
-          <div style={{ fontSize: 34, fontWeight: 700 }}>{awaiting}</div>
-        </div>
-        <div className="card">
-          <div className="muted small">Completed (PR opened)</div>
-          <div style={{ fontSize: 34, fontWeight: 700 }}>{done}</div>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="row">
-          <h3 style={{ margin: 0 }}>Recent requests</h3>
-          <div className="spacer" />
-          <span className="small muted">
-            {total} total · {memberCount} member{memberCount === 1 ? "" : "s"}
-          </span>
-        </div>
-        {recent.length === 0 ? (
-          <p className="muted" style={{ marginBottom: 0 }}>
-            Nothing yet. <Link href="/requests/new">File your first request →</Link>
-          </p>
-        ) : (
-          <table>
-            <tbody>
-              {recent.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <Link href={`/requests/${r.id}`}>{r.title}</Link>
-                  </td>
-                  <td style={{ width: 160 }}>
-                    <span className="badge status">{statusLabel(r.status)}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
     </div>
   );
 }

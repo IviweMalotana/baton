@@ -38,7 +38,8 @@ Reply with a single JSON object only, matching exactly this shape:
 
 export async function runBrd(
   ctx: AgentContext,
-  uxCheck: UxCheckResult
+  uxCheck: UxCheckResult,
+  companyContext = ""
 ): Promise<BrdResult> {
   const { title, description, type, discoveryBrief, discoveryTranscript } = ctx.request;
   const confirmed = (discoveryBrief || "").trim();
@@ -46,6 +47,11 @@ export async function runBrd(
 
   const userPrompt = `Request type: ${type}
 Title: ${title}
+
+Company context (how this business works and speaks):
+"""
+${companyContext.slice(0, 6000) || "(not provided)"}
+"""
 
 Stakeholder description:
 ${description}

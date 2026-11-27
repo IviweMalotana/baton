@@ -36,6 +36,7 @@ export interface DiscoveryInput {
   transcript: string;
   turns: DiscoveryTurnInput[];
   routing?: string | null;
+  companyContext?: string;
 }
 
 const SYSTEM = `You are Baton, a senior business analyst interviewing a stakeholder about a change.
@@ -79,6 +80,11 @@ export async function nextDiscoveryStep(input: DiscoveryInput): Promise<Discover
     .slice(-9000);
 
   const user = `Request title: ${input.title}
+
+Company context (read this before asking anything):
+"""
+${(input.companyContext || "").slice(0, 7000) || "(not provided)"}
+"""
 
 Original request:
 """

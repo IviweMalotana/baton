@@ -8,220 +8,147 @@ export default async function Home() {
   const user = await getCurrentUser();
   if (user) redirect("/dashboard");
 
-  const steps = [
-    {
-      n: "01",
-      title: "File the request",
-      body: "A stakeholder writes what they need in plain language. Bug or feature, it starts in the same place.",
-    },
-    {
-      n: "02",
-      title: "Baton investigates",
-      body: "It drives the app to reproduce a bug, or reads the repository to scope a feature. Then it writes the BRD as Gherkin with acceptance criteria and explicit assumptions.",
-    },
-    {
-      n: "03",
-      title: "You hold the gate",
-      body: "Accept, alter or reject the requirements before any code is written. The decision, and the reason, stay on the record.",
-    },
-    {
-      n: "04",
-      title: "It ships with evidence",
-      body: "Baton files the Jira tickets, plans and builds on a branch, runs the acceptance and regression checks in a browser, and opens the pull request.",
-    },
-  ];
-
-  const values = [
-    {
-      title: "Requirements that trace to code",
-      body: "Every scenario links back to the request that caused it and forward to the ticket, branch, test and pull request that satisfy it.",
-    },
-    {
-      title: "Jira stays the source of truth",
-      body: "Baton does not replace your tracker. It files the product, design, backend, frontend and DevOps tickets under the epic you already use.",
-    },
-    {
-      title: "QA before the PR",
-      body: "Acceptance, bug-fix and regression checks run against the real app, not a mock. The PR arrives with evidence attached.",
-    },
-    {
-      title: "The context survives",
-      body: "Decisions, rejected requirements, questions and releases are kept. The next request does not start from a blank page.",
-    },
-  ];
-
   return (
-    <div className="landing">
-      <header className="landing-header">
-        <Link href="/" className="landing-brand" aria-label={`${APP_NAME} home`}>
-          <span className="landing-mark" aria-hidden>
-            ⟡
-          </span>
-          {APP_NAME}
-        </Link>
-        <nav className="landing-nav" aria-label="Primary">
-          <a href="#how">How it works</a>
-          <a href="#why">Why Baton</a>
-          <a href="#integrations">Integrations</a>
-          <Link href="/login">Sign in</Link>
-          <Link href="/register" className="landing-button small">
-            Start free
+    <div className="site">
+      <section className="site-panel">
+        <header className="site-nav">
+          <Link href="/" className="brand" aria-label={`${APP_NAME} home`}>
+            <span className="brand-dot" aria-hidden />
+            {APP_NAME}
           </Link>
-        </nav>
-      </header>
+          <nav className="site-links" aria-label="Primary">
+            <a href="#how">How it works</a>
+            <a href="#paths">Who it is for</a>
+            <Link href="/login">Sign in</Link>
+            <Link href="/register" className="btn small">
+              Start
+            </Link>
+          </nav>
+        </header>
 
-      <main>
-        <section className="landing-hero">
-          <div className="landing-hero-copy">
-            <p className="landing-kicker">The AI senior BA</p>
-            <h1>Your delivery team&apos;s missing BA.</h1>
-            <p className="landing-lede">
-              Baton turns a stakeholder request into approved Gherkin requirements,
-              Jira tickets and a QA-verified pull request. You keep the judgement.
-              It keeps the thread.
-            </p>
-            <div className="landing-actions">
-              <form action={enterDemo}>
-                <button className="landing-button" type="submit">
-                  Explore the demo workspace
-                </button>
-              </form>
-              <Link href="/register" className="landing-button secondary">
-                Create your workspace
-              </Link>
-            </div>
-            <p className="landing-note">
-              No setup, no card. The demo is a populated workspace with requests at
-              three different pipeline stages.
-            </p>
+        <div className="hero">
+          <div className="hero-mark" aria-hidden>
+            B
           </div>
-
-          <div className="landing-board" aria-label="A request moving through the pipeline">
-            <div className="landing-board-head">
-              <span className="landing-dot" aria-hidden />
-              <span>ACME-1012</span>
-              <span className="landing-board-status">Awaiting approval</span>
-            </div>
-            <h2>Saved payment methods at checkout</h2>
-            <p className="landing-board-lede">
-              Returning customers should not re-enter a card they have already
-              saved. Adding a new card must not lose the basket.
-            </p>
-            <div className="landing-track" aria-hidden>
-              <span className="done">UX check</span>
-              <span className="done">BRD</span>
-              <span className="active">Approval</span>
-              <span>Build</span>
-              <span>QA</span>
-              <span>PR</span>
-            </div>
-            <div className="landing-artifact">
-              <p className="landing-artifact-label">Given / When / Then</p>
-              <pre>{`Given I have a saved card
-When I reach the payment step
-Then my saved card is selected
-And my basket is unchanged`}</pre>
-            </div>
-            <div className="landing-board-foot">
-              <span>Jira · ACME-1001</span>
-              <span>GitHub · acme/storefront</span>
-            </div>
-          </div>
-        </section>
-
-        <section id="how" className="landing-section">
-          <div className="landing-section-head">
-            <p className="landing-kicker">How it works</p>
-            <h2>One request. One honest thread.</h2>
-            <p>
-              The work between &quot;someone asked for this&quot; and &quot;it is
-              verified in production&quot; is where requirements drift and context
-              gets lost. Baton makes that thread explicit.
-            </p>
-          </div>
-          <ol className="landing-steps">
-            {steps.map((step) => (
-              <li key={step.n}>
-                <span className="landing-step-n">{step.n}</span>
-                <h3>{step.title}</h3>
-                <p>{step.body}</p>
-              </li>
-            ))}
-          </ol>
-        </section>
-
-        <section id="why" className="landing-section sand">
-          <div className="landing-section-head">
-            <p className="landing-kicker">Why Baton</p>
-            <h2>Not another chatbot. A delivery record.</h2>
-            <p>
-              Most AI tools write something plausible and leave. Baton writes the
-              requirement, waits for a human, and then follows it all the way to a
-              tested change.
-            </p>
-          </div>
-          <div className="landing-grid">
-            {values.map((value) => (
-              <article key={value.title} className="landing-card">
-                <h3>{value.title}</h3>
-                <p>{value.body}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section id="integrations" className="landing-section">
-          <div className="landing-section-head">
-            <p className="landing-kicker">Plug into the tools you already use</p>
-            <h2>It does not ask you to move.</h2>
-            <p>
-              Bring the tracker and the repository. Baton connects to them, and
-              falls back to a deterministic draft when an integration is not
-              configured, so the pipeline always runs.
-            </p>
-          </div>
-          <div className="landing-integrations">
-            <div>
-              <strong>Jira</strong>
-              <span>Projects, epics, issues, delivery tickets</span>
-            </div>
-            <div>
-              <strong>GitHub</strong>
-              <span>Repos, branches, commits, pull requests</span>
-            </div>
-            <div>
-              <strong>Claude</strong>
-              <span>BRD, questions, planning and review</span>
-            </div>
-            <div>
-              <strong>Playwright</strong>
-              <span>Acceptance, bug-fix and regression checks</span>
-            </div>
-          </div>
-        </section>
-
-        <section className="landing-cta">
-          <h2>See the thread for yourself.</h2>
-          <p>
-            Open the demo workspace and follow one request from intake to pull
-            request.
+          <h1>A senior BA, on tap.</h1>
+          <p className="lede">
+            Baton listens to the stakeholder, asks until the brief is clear, and
+            turns it into requirements your team can build. One BA, or a whole
+            company. Nothing is assumed.
           </p>
-          <div className="landing-actions">
+          <div className="hero-actions">
+            <Link href="/register" className="btn">
+              Start free
+            </Link>
             <form action={enterDemo}>
-              <button className="landing-button" type="submit">
-                Explore the demo
+              <button className="btn secondary" type="submit">
+                See the demo
               </button>
             </form>
-            <Link href="/register" className="landing-button secondary">
-              Create your workspace
-            </Link>
           </div>
-        </section>
-      </main>
+          <p className="hero-note">No card. Connect Jira and GitHub when you are ready.</p>
+        </div>
 
-      <footer className="landing-footer">
+        <div className="trust" aria-label="Works with">
+          <span>Jira</span>
+          <span>GitHub</span>
+          <span>Deepgram</span>
+          <span>DeepSeek</span>
+        </div>
+      </section>
+
+      <section className="site-panel site-section" id="paths">
+        <h2>Two ways to use it.</h2>
+        <p className="lede">The work is the same. Who holds the account is different.</p>
+        <div className="paths">
+          <article className="path">
+            <p className="eyebrow">I am the BA</p>
+            <h3>Bring your own tools</h3>
+            <p>
+              Connect your Jira and GitHub, run the stakeholder interview, and
+              ship a BRD your team can build from.
+            </p>
+            <ul>
+              <li>Personal workspace</li>
+              <li>Your repos and your tracker</li>
+              <li>Every transcript and decision kept</li>
+            </ul>
+            <Link href="/register?type=ba" className="btn small">
+              Start as a BA
+            </Link>
+          </article>
+
+          <article className="path">
+            <p className="eyebrow">I am hiring</p>
+            <h3>Give a team its BA</h3>
+            <p>
+              Create the company, invite the BAs, and see every request, brief and
+              approval in one place.
+            </p>
+            <ul>
+              <li>Company workspace</li>
+              <li>Invite and remove BAs</li>
+              <li>One shared company voice</li>
+            </ul>
+            <Link href="/register?type=company" className="btn small">
+              Create a company
+            </Link>
+          </article>
+        </div>
+      </section>
+
+      <section className="site-panel site-section" id="how">
+        <h2>From conversation to confirmed brief.</h2>
+        <div className="features">
+          <article className="feature">
+            <span className="feature-num">01</span>
+            <h3>It listens</h3>
+            <p>
+              Record the stakeholder with Deepgram, or paste the notes. Speaker
+              labels and a verbatim transcript.
+            </p>
+          </article>
+          <article className="feature">
+            <span className="feature-num">02</span>
+            <h3>It asks</h3>
+            <p>
+              One question at a time until users, outcome, scope, edge cases and
+              success are settled. It will not invent an answer.
+            </p>
+          </article>
+          <article className="feature">
+            <span className="feature-num">03</span>
+            <h3>It writes</h3>
+            <p>
+              A plain-language BRD with Given/When/Then, acceptance criteria and
+              the delivery tickets, ready for your approval.
+            </p>
+          </article>
+          <article className="feature">
+            <span className="feature-num">04</span>
+            <h3>It remembers</h3>
+            <p>
+              Company profile, voice notes and documents live in one place and are
+              read before every interview.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section className="site-cta">
+        <h2>Start with the next change.</h2>
+        <p>
+          Open a workspace, upload how your company speaks, and let Baton run the
+          first interview.
+        </p>
+        <Link href="/register" className="btn">
+          Create a workspace
+        </Link>
+      </section>
+
+      <footer className="site-footer">
         <span>
-          {APP_NAME} — the AI senior BA.
+          © {new Date().getFullYear()} {APP_NAME}. A senior BA, on tap.
         </span>
         <nav aria-label="Footer">
           <Link href="/login">Sign in</Link>

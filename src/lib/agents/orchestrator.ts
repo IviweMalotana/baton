@@ -120,7 +120,9 @@ export async function runToApproval(requestId: string): Promise<void> {
     request = await setStatus(requestId, "BRD_DRAFTING");
     ctx = await buildContext(request);
     await logEvent(requestId, "brd", "BRD agent started.");
-    const brd = await runBrd(ctx, ux);
+    const { getCompanyContext } = await import("../knowledge/context");
+    const companyContext = await getCompanyContext(request.companyId);
+    const brd = await runBrd(ctx, ux, companyContext);
     await db.brd.upsert({
       where: { requestId },
       create: {

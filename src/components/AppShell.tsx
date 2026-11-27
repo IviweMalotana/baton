@@ -1,60 +1,68 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
+import { logout } from "@/app/actions/auth";
 import { APP_NAME } from "@/lib/brand";
 
-/**
- * The authenticated shell.
- *
- * Desktop keeps the fixed sidebar. Below 860px the same sidebar becomes an
- * off-canvas drawer behind a compact top bar, so the workspace is usable on a
- * phone without a separate mobile navigation to maintain.
- */
+const NAV = [
+  { href: "/requests", label: "Requests" },
+  { href: "/knowledge", label: "Knowledge" },
+  { href: "/members", label: "Team" },
+  { href: "/settings", label: "Settings" },
+] as const;
+
 export function AppShell({
-  sidebar,
+  user,
+  companyName,
   children,
 }: {
-  sidebar: ReactNode;
+  user: { name: string | null; email: string; initials: string };
+  companyName: string;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
   const pathname = usePathname();
-
-  // Close the drawer whenever the route changes, including link clicks inside
-  // the sidebar itself.
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+  const isActive = (href: string) =>
+    pathname === href || pathname.startsWith(`${href}/`);
 
   return (
-    <div className="app-shell">
-      <header className="mobile-topbar">
-        <button
-          type="button"
-          className="mobile-menu"
-          aria-label="Open navigation"
-          aria-expanded={open}
-          onClick={() => setOpen(true)}
-        >
-          <span aria-hidden>☰</span>
-        </button>
-        <span className="mobile-brand">
-          <span aria-hidden>⟡</span> {APP_NAME}
-        </span>
+    <div className="appv2">
+      <header className="appv2-bar">
+        <div className="appv2-inner">
+          <Link href="/dashboard" className="brand" aria-label={`${APP_NAME} home`}>
+            <span className="brand-dot" aria-hidden />
+            {APP_NAME}
+          </Link>
+
+          <nav className="appv2-nav" aria-label="Workspace">
+            {NAV.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={isActive(item.href) ? "active" : undefined}
+                aria-current={isActive(item.href) ? "page" : undefined}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+
+          <div className="appv2-user">
+            <span className="avatar" aria-hidden>
+              {user.initials}
+            </span>
+            <span className="user-email muted small">{companyName}</span>
+            <form action={logout}>
+              <button className="link-button" type="submit">
+                Sign out
+              </button>
+            </form>
+          </div>
+        </div>
       </header>
 
-      <div className={`sidebar-drawer${open ? " open" : ""}`}>{sidebar}</div>
-      {open && (
-        <button
-          type="button"
-          className="sidebar-scrim"
-          aria-label="Close navigation"
-          onClick={() => setOpen(false)}
-        />
-      )}
-
-      <main className="main">{children}</main>
+      <main>{children}</main>
     </div>
   );
 }
