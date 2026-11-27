@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
-  title: `${APP_NAME} — the AI senior BA`,
+  title: `${APP_NAME} - a senior BA, on tap.`,
   description: APP_TAGLINE,
   applicationName: APP_NAME,
 };
